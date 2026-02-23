@@ -4,6 +4,7 @@
 backend/build/
 backend/.gradle/
 backend/out/
+backend/target/
 
 *.class
 *.log
