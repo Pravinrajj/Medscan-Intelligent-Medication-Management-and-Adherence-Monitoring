@@ -67,3 +67,5 @@ coverage/
 # =========================
 dataset/*.csv
 !dataset/README.md
+medicine_data.csv
+*.csv
