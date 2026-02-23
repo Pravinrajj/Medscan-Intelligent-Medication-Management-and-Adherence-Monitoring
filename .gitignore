@@ -1,0 +1,68 @@
+# =========================
+# Java / Spring Boot
+# =========================
+backend/build/
+backend/.gradle/
+backend/out/
+
+*.class
+*.log
+
+# Keep Gradle wrapper
+!backend/gradle/wrapper/gradle-wrapper.jar
+
+# =========================
+# Node / React Native
+# =========================
+mobile-app/node_modules/
+mobile-app/.expo/
+mobile-app/dist/
+mobile-app/web-build/
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =========================
+# Python / ML Service
+# =========================
+ml-service/__pycache__/
+ml-service/*.pyc
+ml-service/.venv/
+ml-service/venv/
+ml-service/*.egg-info/
+
+# =========================
+# Environment & Secrets
+# =========================
+.env
+.env.*
+application-local.properties
+
+# =========================
+# IDE
+# =========================
+.idea/
+.vscode/
+*.iml
+
+# =========================
+# OS Junk
+# =========================
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# =========================
+# Coverage / Temp
+# =========================
+coverage/
+.nyc_output/
+*.tmp
+*.bak
+
+# =========================
+# Large Dataset Files
+# =========================
+dataset/*.csv
+!dataset/README.md

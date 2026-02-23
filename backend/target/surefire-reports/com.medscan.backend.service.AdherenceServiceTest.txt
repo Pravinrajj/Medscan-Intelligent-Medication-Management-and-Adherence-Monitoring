@@ -1,0 +1,22 @@
+-------------------------------------------------------------------------------
+Test set: com.medscan.backend.service.AdherenceServiceTest
+-------------------------------------------------------------------------------
+Tests run: 2, Failures: 0, Errors: 2, Skipped: 0, Time elapsed: 3.608 s <<< FAILURE! -- in com.medscan.backend.service.AdherenceServiceTest
+com.medscan.backend.service.AdherenceServiceTest.testLogAdherence_Missed_DoesNotDecrementStock -- Time elapsed: 3.485 s <<< ERROR!
+java.lang.NullPointerException: Cannot invoke "com.medscan.backend.repository.mysql.GroupMemberRepository.findByIdUserId(java.lang.Long)" because "this.groupMemberRepository" is null
+	at com.medscan.backend.service.AdherenceService.logToUserGroups(AdherenceService.java:156)
+	at com.medscan.backend.service.AdherenceService.logAdherence(AdherenceService.java:99)
+	at com.medscan.backend.service.AdherenceServiceTest.testLogAdherence_Missed_DoesNotDecrementStock(AdherenceServiceTest.java:76)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597)
+
+com.medscan.backend.service.AdherenceServiceTest.testLogAdherence_Taken_DecrementsStock -- Time elapsed: 0.020 s <<< ERROR!
+java.lang.NullPointerException: Cannot invoke "com.medscan.backend.repository.mysql.GroupMemberRepository.findByIdUserId(java.lang.Long)" because "this.groupMemberRepository" is null
+	at com.medscan.backend.service.AdherenceService.logToUserGroups(AdherenceService.java:156)
+	at com.medscan.backend.service.AdherenceService.logAdherence(AdherenceService.java:96)
+	at com.medscan.backend.service.AdherenceServiceTest.testLogAdherence_Taken_DecrementsStock(AdherenceServiceTest.java:51)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597)
+
