@@ -22,19 +22,8 @@ public class DrugLookup {
     @Column(length = 512)
     private String manufacturer;
 
-    @Column(length = 100)
-    private String type;
-
-    @Column(length = 255)
-    private String packSize;
-
     @Column(length = 512)
     private String composition1;
-
-    @Column(length = 512)
-    private String composition2;
-
-    private Boolean discontinued;
 
     // Fields from Kaggle medicine_data.csv
     @Column(length = 255)

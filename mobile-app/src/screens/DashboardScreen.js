@@ -29,14 +29,13 @@ const DashboardScreen = ({ navigation }) => {
   const [error, setError] = useState(false);
   const [loggedSchedules, setLoggedSchedules] = useState(new Set());
   const [isOnline, setIsOnline] = useState(true);
-  const [cachedAt, setCachedAt] = useState(null); // timestamp when data was cached
+  const [cachedAt, setCachedAt] = useState(null);
   const [isFromCache, setIsFromCache] = useState(false);
 
   useEffect(() => {
     const unsub = offlineSyncService.subscribe(status => {
       const wasOffline = !isOnline;
       setIsOnline(status);
-      // Auto-refresh when coming back online
       if (wasOffline && status) {
         console.log('[Dashboard] Back online — auto-refreshing');
         fetchData();
@@ -68,7 +67,7 @@ const DashboardScreen = ({ navigation }) => {
       }
       setLoggedSchedules(logged);
 
-      // Cache to AsyncStorage for offline use
+      // Cache to AsyncStorage
       const cacheData = {
         schedules: schedRes.data,
         stats: statsRes.data,
@@ -80,7 +79,6 @@ const DashboardScreen = ({ navigation }) => {
     } catch (e) {
         console.error('[Dashboard] Fetch failed:', e.message);
         setError(true);
-        // Try loading from cache
         await loadFromCache();
     } finally {
         setLoading(false);
@@ -105,7 +103,7 @@ const DashboardScreen = ({ navigation }) => {
           data.stats.todayLogs.forEach(log => logged.add(log.scheduleId));
         }
         setLoggedSchedules(logged);
-        setError(false); // We have cached data, clear error
+        setError(false);
         console.log('[Dashboard] Loaded from cache, last updated:', data.lastUpdated);
       }
     } catch (e) {
@@ -277,15 +275,15 @@ const DashboardScreen = ({ navigation }) => {
                 </View>
                 <View style={styles.statsGrid}>
                     <View style={styles.statItem}>
-                        <Text style={styles.statValue}>{stats.takenCount}</Text>
+                        <Text style={styles.statValue}>{stats.takenCount || 0}</Text>
                         <Text style={styles.statLabel}>Taken</Text>
                     </View>
                     <View style={styles.statItem}>
-                        <Text style={styles.statValue}>{stats.snoozedCount}</Text>
+                        <Text style={styles.statValue}>{stats.snoozedCount || 0}</Text>
                         <Text style={styles.statLabel}>Snoozed</Text>
                     </View>
                     <View style={styles.statItem}>
-                        <Text style={styles.statValue}>{stats.missedCount}</Text>
+                        <Text style={styles.statValue}>{stats.missedCount || 0}</Text>
                         <Text style={styles.statLabel}>Missed</Text>
                     </View>
                 </View>
@@ -297,14 +295,21 @@ const DashboardScreen = ({ navigation }) => {
 
         <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Today's Schedule</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('ScanPrescription')}>
-                <Text style={styles.scanLink}>📷 Scan Medicine</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+                <TouchableOpacity onPress={() => navigation.navigate('AddMedicine')}>
+                    <Text style={styles.addLink}>+ Add</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => navigation.navigate('ScanPrescription')}>
+                    <Text style={styles.scanLink}>📷 Scan</Text>
+                </TouchableOpacity>
+            </View>
         </View>
         
         {schedules.length === 0 ? (
            <View style={styles.emptyContainer}>
-               <Text style={styles.emptyText}>No medications scheduled for today.</Text>
+               <Text style={styles.emptyIcon}>💊</Text>
+               <Text style={styles.emptyText}>No medications scheduled yet</Text>
+               <Text style={styles.emptySubtext}>Add your first medicine to start tracking</Text>
                <TouchableOpacity style={styles.addMedBtn} onPress={() => navigation.navigate('AddMedicine')}>
                    <Text style={styles.addMedText}>+ Add Medication</Text>
                </TouchableOpacity>
@@ -369,10 +374,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, marginBottom: 10, marginTop: 6,
   },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: '#2c3e50' },
+  addLink: { fontSize: 14, color: '#27ae60', fontWeight: '700' },
   scanLink: { fontSize: 14, color: '#3498db', fontWeight: '600' },
 
   emptyContainer: { alignItems: 'center', paddingVertical: 40, paddingHorizontal: 16 },
-  emptyText: { fontSize: 15, color: '#95a5a6', marginBottom: 16 },
+  emptyIcon: { fontSize: 48, marginBottom: 12 },
+  emptyText: { fontSize: 16, fontWeight: '700', color: '#2c3e50', marginBottom: 4 },
+  emptySubtext: { fontSize: 14, color: '#95a5a6', marginBottom: 20, textAlign: 'center' },
   addMedBtn: {
     backgroundColor: '#3498db', paddingVertical: 12, paddingHorizontal: 24,
     borderRadius: 10,

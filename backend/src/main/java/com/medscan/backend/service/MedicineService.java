@@ -4,7 +4,6 @@ import com.medscan.backend.model.Medicine;
 import com.medscan.backend.repository.mysql.MedicineRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -71,14 +70,5 @@ public class MedicineService implements CommandLineRunner {
             m.setDescription(row[4]);
             medicineRepository.save(m);
         }
-    }
-
-    // Placeholder for External DB Sync (FDA/OpenFDA)
-    // Runs every day at midnight
-    @Scheduled(cron = "0 0 0 * * ?")
-    public void syncMedicinesFromExternalSource() {
-        System.out.println("Starting scheduled medicine sync from external source...");
-        // Logic to call external API and update local DB goes here
-        // e.g. RestTemplate call to https://api.fda.gov/drug/label.json
     }
 }

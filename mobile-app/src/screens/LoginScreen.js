@@ -38,12 +38,12 @@ const LoginScreen = ({ navigation }) => {
         <Text style={styles.title}>Welcome Back</Text>
 
         <View style={styles.inputContainer}>
-          <Text style={styles.label}>Username</Text>
+          <Text style={styles.label}>Username, Email, or Phone</Text>
           <TextInput
             style={styles.input}
             value={username}
             onChangeText={setUsername}
-            placeholder="Enter your username"
+            placeholder="Enter username, email, or phone"
             placeholderTextColor="#bdc3c7"
             autoCapitalize="none"
           />

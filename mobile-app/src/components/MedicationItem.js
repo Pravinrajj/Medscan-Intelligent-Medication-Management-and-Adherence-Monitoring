@@ -2,25 +2,26 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 
 /**
- * Determines the status of each scheduled time for today.
- * Returns: { isActive: boolean, activeTimeLabel: string, statusText: string }
- * 
- * - "active" = within ±10 min of a scheduled time (show Take/Miss/Snooze)
- * - "upcoming" = next scheduled time is in the future (show upcoming time)
- * - "done" = all times have passed today (show Done)
+ * Determines status for the medicine card.
+ * No longer uses a ±10 min window — shows action buttons for ALL unlogged times today.
+ * Past unlogged times show "Overdue" label, upcoming show "Next: HH:MM".
  */
-const getTimeStatus = (scheduleTimes) => {
+const getTimeStatus = (scheduleTimes, frequencyType) => {
+  // AS_NEEDED medicines always show Take button
+  if (frequencyType === 'AS_NEEDED') {
+    return { isActive: true, statusText: 'Take as needed', isAsNeeded: true };
+  }
+
   if (!scheduleTimes || scheduleTimes.length === 0) {
-    return { isActive: true, activeTimeLabel: '', statusText: '' };
+    return { isActive: true, statusText: '', isAsNeeded: false };
   }
 
   const now = new Date();
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
-  const WINDOW = 10; // ±10 minutes
 
+  let hasOverdue = false;
+  let overdueLabel = '';
   let closestUpcoming = null;
-  let isInWindow = false;
-  let activeTimeLabel = '';
 
   for (const t of scheduleTimes) {
     const timeStr = t.scheduledTime || '';
@@ -32,68 +33,76 @@ const getTimeStatus = (scheduleTimes) => {
     if (isNaN(h) || isNaN(m)) continue;
     
     const schedMinutes = h * 60 + m;
-    const diff = nowMinutes - schedMinutes;
+    const label = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     
-    // Within ±10 min window
-    if (diff >= -WINDOW && diff <= WINDOW) {
-      isInWindow = true;
-      activeTimeLabel = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-      break;
-    }
-    
-    // Track closest upcoming time
-    if (schedMinutes > nowMinutes) {
+    if (schedMinutes <= nowMinutes) {
+      // Past time — overdue if not logged
+      hasOverdue = true;
+      overdueLabel = label;
+    } else {
+      // Upcoming
       if (!closestUpcoming || schedMinutes < closestUpcoming.minutes) {
-        closestUpcoming = { 
-          minutes: schedMinutes, 
-          label: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}` 
-        };
+        closestUpcoming = { minutes: schedMinutes, label };
       }
     }
   }
 
-  if (isInWindow) {
-    return { isActive: true, activeTimeLabel, statusText: `Due: ${activeTimeLabel}` };
+  if (hasOverdue) {
+    return { isActive: true, statusText: `⚠️ Overdue since ${overdueLabel}`, isAsNeeded: false };
   }
   
   if (closestUpcoming) {
-    return { isActive: false, activeTimeLabel: '', statusText: `Upcoming: ${closestUpcoming.label}` };
+    return { isActive: true, statusText: `Next: ${closestUpcoming.label}`, isAsNeeded: false };
   }
 
-  // All times have passed
-  return { isActive: false, activeTimeLabel: '', statusText: 'All doses done for today' };
+  return { isActive: false, statusText: 'All doses done for today', isAsNeeded: false };
 };
 
 const MedicationItem = ({ schedule, onTaken, onMissed, onSnooze, onPress, loggedToday }) => {
   const medicine = schedule?.medicine || {};
   const scheduleTimes = schedule?.scheduleTimes || [];
+  const frequencyType = schedule?.frequencyType;
   
-  const timeStatus = useMemo(() => getTimeStatus(scheduleTimes), [scheduleTimes]);
+  const timeStatus = useMemo(() => getTimeStatus(scheduleTimes, frequencyType), [scheduleTimes, frequencyType]);
   const timesDisplay = scheduleTimes
     .map(t => (t.scheduledTime || '').substring(0, 5))
     .filter(Boolean)
     .join(', ');
 
+  // Build smart dosage display (no redundant type)
+  const dosageText = `${schedule?.doseAmount || '1'} ${schedule?.doseUnit || 'Dose'}`;
+  const isAsNeeded = frequencyType === 'AS_NEEDED';
+
   return (
     <View style={styles.card}>
       <TouchableOpacity style={styles.infoSection} onPress={onPress} activeOpacity={onPress ? 0.6 : 1}>
         <Text style={styles.medName}>{medicine.name || 'Medication'}</Text>
-        <Text style={styles.details}>
-          Take: {schedule?.doseAmount || '1'} {schedule?.doseUnit || 'Dose'}{medicine.type ? ` (${medicine.type})` : ''}
-        </Text>
+        <Text style={styles.details}>Take: {dosageText}</Text>
+        
         {schedule?.currentStock != null && (
           <Text style={[styles.stock, schedule.currentStock <= 5 ? styles.lowStock : null]}>
               Stock: {schedule.currentStock} left
           </Text>
         )}
-        {timesDisplay ? (
+        
+        {/* Show times only for scheduled medicines */}
+        {!isAsNeeded && timesDisplay ? (
           <Text style={styles.time}>⏰ {timesDisplay}</Text>
         ) : null}
+        
+        {/* Frequency badge for special types */}
+        {isAsNeeded && (
+          <View style={styles.asNeededBadge}>
+            <Text style={styles.asNeededText}>As Needed</Text>
+          </View>
+        )}
         
         {/* Status indicator */}
         <Text style={[
           styles.statusText, 
-          timeStatus.isActive ? styles.statusActive : styles.statusUpcoming
+          loggedToday ? styles.statusDone :
+          timeStatus.statusText.includes('Overdue') ? styles.statusOverdue :
+          styles.statusUpcoming
         ]}>
           {loggedToday ? '✅ Recorded today' : timeStatus.statusText}
         </Text>
@@ -101,7 +110,7 @@ const MedicationItem = ({ schedule, onTaken, onMissed, onSnooze, onPress, logged
         {onPress && <Text style={styles.tapHint}>Tap for details →</Text>}
       </TouchableOpacity>
 
-      {/* Action Buttons */}
+      {/* Action Buttons — always show for unlogged items */}
       <View style={styles.actions}>
         {loggedToday ? (
           <View style={styles.doneIndicator}>
@@ -112,22 +121,20 @@ const MedicationItem = ({ schedule, onTaken, onMissed, onSnooze, onPress, logged
             <TouchableOpacity style={styles.takeButton} onPress={onTaken}>
               <Text style={styles.takeButtonText}>✓ Take</Text>
             </TouchableOpacity>
-            {onSnooze && (
+            {!isAsNeeded && onSnooze && (
               <TouchableOpacity style={styles.snoozeButton} onPress={onSnooze}>
                 <Text style={styles.snoozeButtonText}>⏰</Text>
               </TouchableOpacity>
             )}
-            {onMissed && (
+            {!isAsNeeded && onMissed && (
               <TouchableOpacity style={styles.missButton} onPress={onMissed}>
                 <Text style={styles.missButtonText}>✗ Miss</Text>
               </TouchableOpacity>
             )}
           </>
         ) : (
-          <View style={styles.waitIndicator}>
-            <Text style={styles.waitText}>
-              {timeStatus.statusText.startsWith('Upcoming') ? '⏳' : '✅'}
-            </Text>
+          <View style={styles.doneIndicator}>
+            <Text style={styles.doneText}>Done ✓</Text>
           </View>
         )}
       </View>
@@ -179,12 +186,28 @@ const styles = StyleSheet.create({
     color: '#e74c3c',
     fontWeight: 'bold',
   },
+  asNeededBadge: {
+    backgroundColor: '#f0f0ff',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginTop: 4,
+  },
+  asNeededText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6c5ce7',
+  },
   statusText: {
     fontSize: 11,
     marginTop: 4,
     fontWeight: '600',
   },
-  statusActive: {
+  statusDone: {
+    color: '#27ae60',
+  },
+  statusOverdue: {
     color: '#e67e22',
   },
   statusUpcoming: {
@@ -248,13 +271,6 @@ const styles = StyleSheet.create({
     color: '#27ae60',
     fontWeight: '700',
     fontSize: 13,
-  },
-  waitIndicator: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-  },
-  waitText: {
-    fontSize: 20,
   },
 });
 
