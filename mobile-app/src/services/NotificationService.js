@@ -187,6 +187,7 @@ export async function scheduleMedicationReminder(name, hours, minutes, scheduleI
         },
       },
       trigger: {
+        type: 'daily',
         hour: hours,
         minute: minutes,
         repeats: true,

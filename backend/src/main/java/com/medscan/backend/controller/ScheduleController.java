@@ -33,6 +33,7 @@ public class ScheduleController {
         schedule.setStartDate(scheduleRequest.getStartDate());
         schedule.setEndDate(scheduleRequest.getEndDate());
         schedule.setFrequencyType(scheduleRequest.getFrequencyType());
+        schedule.setCustomDays(scheduleRequest.getCustomDays());
         
         // Inventory
         schedule.setDoseAmount(scheduleRequest.getDoseAmount());
@@ -53,6 +54,7 @@ public class ScheduleController {
         updates.setDoseUnit(request.getDoseUnit());
         updates.setCurrentStock(request.getCurrentStock());
         updates.setFrequencyType(request.getFrequencyType());
+        updates.setCustomDays(request.getCustomDays());
         updates.setEndDate(request.getEndDate());
 
         return ResponseEntity.ok(scheduleService.updateSchedule(scheduleId, updates, request.getTimes()));
@@ -75,6 +77,7 @@ public class ScheduleController {
         private Double doseAmount;
         private String doseUnit;
         private Integer currentStock;
+        private String customDays;
 
         // Getters/Setters
         public java.time.LocalDate getStartDate() { return startDate; }
@@ -92,5 +95,7 @@ public class ScheduleController {
         public void setDoseUnit(String doseUnit) { this.doseUnit = doseUnit; }
         public Integer getCurrentStock() { return currentStock; }
         public void setCurrentStock(Integer currentStock) { this.currentStock = currentStock; }
+        public String getCustomDays() { return customDays; }
+        public void setCustomDays(String customDays) { this.customDays = customDays; }
     }
 }

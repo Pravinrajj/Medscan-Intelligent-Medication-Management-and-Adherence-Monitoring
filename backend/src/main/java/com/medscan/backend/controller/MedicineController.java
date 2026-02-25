@@ -28,8 +28,8 @@ public class MedicineController {
     private String openFdaApiKey;
 
     /**
-     * Autocomplete search - queries DrugLookup table (CSV data) first,
-     * falls back to local Medicine table.
+     * Autocomplete search - queries local Medicine table.
+     * DrugLookup disabled until a better dataset with brand names is available.
      */
     @GetMapping("/search")
     public ResponseEntity<?> searchMedicines(@RequestParam String query) {
@@ -37,13 +37,7 @@ public class MedicineController {
             return ResponseEntity.ok(List.of());
         }
 
-        // Search DrugLookup table (253K+ Indian medicines)
-        List<DrugLookup> lookups = drugLookupRepository.findTop15ByNameContainingIgnoreCase(query);
-        if (!lookups.isEmpty()) {
-            return ResponseEntity.ok(lookups);
-        }
-
-        // Fallback to local Medicine table
+        // Search local Medicine table (user-created medicines)
         List<Medicine> medicines = medicineService.searchMedicines(query);
         return ResponseEntity.ok(medicines);
     }

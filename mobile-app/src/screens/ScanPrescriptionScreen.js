@@ -62,7 +62,7 @@ const ScanPrescriptionScreen = ({ navigation }) => {
         name: 'prescription.jpg',
       });
 
-      const res = await api.post('/ocr/scan', formData, {
+      const res = await api.post('/prescriptions/scan', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 

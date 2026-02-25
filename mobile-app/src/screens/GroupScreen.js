@@ -48,8 +48,8 @@ const GroupScreen = ({ navigation }) => {
         <Text style={styles.groupIconText}>👥</Text>
       </View>
       <View style={styles.groupInfo}>
-        <Text style={styles.groupName}>{item.name}</Text>
-        <Text style={styles.groupDesc}>{item.description || 'No description'}</Text>
+        <Text style={styles.groupName}>{item.groupName || item.name}</Text>
+        {item.description ? <Text style={styles.groupDesc}>{item.description}</Text> : null}
         <Text style={styles.memberCount}>
           {item.memberCount || item.members?.length || 0} members
         </Text>

@@ -1,5 +1,5 @@
 import React, { useState, useContext, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert, RefreshControl, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert, RefreshControl, TextInput, Switch } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import api from '../api/client';
 import { AuthContext } from '../context/AuthContext';
@@ -15,19 +15,23 @@ const GroupDetailsScreen = ({ navigation, route }) => {
   const [inviting, setInviting] = useState(false);
   const [error, setError] = useState(false);
   const [activeTab, setActiveTab] = useState('members');
+  const [sharedSchedules, setSharedSchedules] = useState([]);
+  const [allowMemberTriggers, setAllowMemberTriggers] = useState(group.allowMemberTriggers || false);
 
   const fetchDetails = async () => {
     try {
       setError(false);
-      const [membersRes, activityRes] = await Promise.all([
+      const [membersRes, activityRes, sharedRes] = await Promise.all([
         api.get(`/groups/members/${group.id}`),
         api.get(`/groups/${group.id}/activity`).catch(() => ({ data: [] })),
+        api.get(`/groups/${group.id}/shared-schedules`).catch(() => ({ data: [] })),
       ]);
       setDetails({
         ...group,
         members: membersRes.data || [],
         activity: activityRes.data || [],
       });
+      setSharedSchedules(sharedRes.data || []);
     } catch (e) {
       console.error('[GroupDetails] Fetch failed:', e.message);
       setError(true);
@@ -49,7 +53,6 @@ const GroupDetailsScreen = ({ navigation, route }) => {
     setRefreshing(false);
   }, [group.id]);
 
-  // Use admin.id from CareGroup model (not creatorId which doesn't exist)
   const isCreator = (group.admin?.id || group.adminId) === userInfo.id;
 
   const handleInvite = async () => {
@@ -61,7 +64,6 @@ const GroupDetailsScreen = ({ navigation, route }) => {
 
     setInviting(true);
     try {
-      // Use backend contact matching endpoint
       const checkRes = await api.post('/groups/contacts/check', [phone]);
       const matchedUsers = checkRes.data || [];
       
@@ -71,15 +73,12 @@ const GroupDetailsScreen = ({ navigation, route }) => {
       }
 
       const targetUser = matchedUsers[0];
-
-      // Check if user is already a member
       const currentMembers = details?.members || [];
       if (currentMembers.some(m => m.id === targetUser.id)) {
         Alert.alert('Already in Group', `${targetUser.fullName || targetUser.username} is already a member.`);
         return;
       }
 
-      // Add member
       await api.post(`/groups/${group.id}/add-member?adminId=${userInfo.id}&userId=${targetUser.id}`);
       Alert.alert('Added!', `${targetUser.fullName || targetUser.username} has been added to the group.`);
       setInvitePhone('');
@@ -89,6 +88,71 @@ const GroupDetailsScreen = ({ navigation, route }) => {
       Alert.alert('Error', msg);
     } finally {
       setInviting(false);
+    }
+  };
+
+  const handleRemoveMember = (member) => {
+    if (member.id === userInfo.id) return; // Can't remove yourself this way
+    if (member.id === (group.admin?.id || group.adminId)) {
+      Alert.alert('Cannot Remove', 'You cannot remove the group admin.');
+      return;
+    }
+    Alert.alert(
+      'Remove Member',
+      `Remove ${member.fullName || member.username} from this group?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.delete(`/groups/${group.id}/remove-member?adminId=${userInfo.id}&userId=${member.id}`);
+              Alert.alert('Removed', `${member.fullName || member.username} has been removed.`);
+              fetchDetails();
+            } catch (e) {
+              Alert.alert('Error', e.response?.data?.message || 'Failed to remove member.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleTriggerReminder = async (targetUserId, targetName, scheduleId, medicineName) => {
+    Alert.alert(
+      'Send Reminder',
+      `Send ${targetName} a reminder to take ${medicineName}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send ✉️',
+          onPress: async () => {
+            try {
+              await api.post(`/groups/${group.id}/trigger-reminder`, {
+                triggerUserId: userInfo.id,
+                targetUserId,
+                scheduleId,
+              });
+              Alert.alert('Sent!', `Reminder sent to ${targetName}.`);
+            } catch (e) {
+              Alert.alert('Error', e.response?.data?.message || 'Failed to send reminder.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleToggleMemberTriggers = async (value) => {
+    setAllowMemberTriggers(value);
+    try {
+      await api.put(`/groups/${group.id}/settings?adminId=${userInfo.id}`, {
+        allowMemberTriggers: value
+      });
+    } catch (e) {
+      setAllowMemberTriggers(!value); // Revert
+      Alert.alert('Error', 'Failed to update settings.');
     }
   };
 
@@ -194,18 +258,18 @@ const GroupDetailsScreen = ({ navigation, route }) => {
 
       {/* Tabs */}
       <View style={styles.tabRow}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'members' && styles.tabActive]}
-          onPress={() => setActiveTab('members')}
-        >
-          <Text style={[styles.tabText, activeTab === 'members' && styles.tabTextActive]}>Members ({members.length})</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'activity' && styles.tabActive]}
-          onPress={() => setActiveTab('activity')}
-        >
-          <Text style={[styles.tabText, activeTab === 'activity' && styles.tabTextActive]}>Activity</Text>
-        </TouchableOpacity>
+        {['members', 'schedules', 'activity'].map(tab => (
+          <TouchableOpacity
+            key={tab}
+            style={[styles.tab, activeTab === tab && styles.tabActive]}
+            onPress={() => setActiveTab(tab)}
+          >
+            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+              {tab === 'members' ? `Members (${members.length})` :
+               tab === 'schedules' ? 'Schedules' : 'Activity'}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       {/* Members List */}
@@ -235,6 +299,43 @@ const GroupDetailsScreen = ({ navigation, route }) => {
                 }]}>
                   {member.adherenceRate}%
                 </Text>
+              )}
+              {/* Remove button — admin only, not for self or admin */}
+              {isCreator && member.id !== userInfo.id && member.id !== (group.admin?.id || group.adminId) && (
+                <TouchableOpacity style={styles.removeMemberBtn} onPress={() => handleRemoveMember(member)}>
+                  <Text style={styles.removeMemberBtnText}>✗</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Shared Schedules */}
+      {activeTab === 'schedules' && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Shared Schedules</Text>
+          {sharedSchedules.length === 0 ? (
+            <Text style={{ color: '#95a5a6', textAlign: 'center', padding: 20 }}>
+              No schedules shared yet. Members can share their schedules to help the group track adherence.
+            </Text>
+          ) : sharedSchedules.map((ss, idx) => (
+            <View key={ss.sharedScheduleId || idx} style={styles.sharedRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sharedMedName}>{ss.medicineName}</Text>
+                <Text style={styles.sharedDetail}>
+                  {ss.doseAmount} {ss.doseUnit} · {(ss.frequencyType || 'DAILY').replace('_', ' ')}
+                </Text>
+                <Text style={styles.sharedBy}>Shared by {ss.sharedByName}</Text>
+              </View>
+              {/* Trigger Reminder Button */}
+              {(isCreator || allowMemberTriggers) && ss.sharedByUserId !== userInfo.id && (
+                <TouchableOpacity
+                  style={styles.triggerBtn}
+                  onPress={() => handleTriggerReminder(ss.sharedByUserId, ss.sharedByName, ss.scheduleId, ss.medicineName)}
+                >
+                  <Text style={styles.triggerBtnText}>🔔</Text>
+                </TouchableOpacity>
               )}
             </View>
           ))}
@@ -281,6 +382,29 @@ const GroupDetailsScreen = ({ navigation, route }) => {
                 <Text style={styles.inviteBtnText}>Add</Text>
               )}
             </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Admin Settings */}
+      {isCreator && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Admin Settings</Text>
+          <View style={styles.settingRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.settingLabel}>Allow Member Reminders</Text>
+              <Text style={styles.settingHint}>
+                {allowMemberTriggers
+                  ? 'All members can send reminders to others'
+                  : 'Only you (admin) can send reminders'}
+              </Text>
+            </View>
+            <Switch
+              value={allowMemberTriggers}
+              onValueChange={handleToggleMemberTriggers}
+              trackColor={{ false: '#d1d5db', true: '#86efac' }}
+              thumbColor={allowMemberTriggers ? '#22c55e' : '#9ca3af'}
+            />
           </View>
         </View>
       )}
@@ -345,6 +469,30 @@ const styles = StyleSheet.create({
   memberName: { fontSize: 15, fontWeight: '600', color: '#2c3e50' },
   memberRole: { fontSize: 12, color: '#95a5a6', marginTop: 2 },
   adherenceText: { fontSize: 16, fontWeight: '800' },
+  removeMemberBtn: {
+    marginLeft: 8, padding: 6, backgroundColor: '#fef2f2', borderRadius: 8,
+  },
+  removeMemberBtnText: { color: '#e74c3c', fontWeight: '700', fontSize: 16 },
+
+  sharedRow: {
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: '#f5f5f5',
+  },
+  sharedMedName: { fontSize: 15, fontWeight: '700', color: '#2c3e50' },
+  sharedDetail: { fontSize: 13, color: '#7f8c8d', marginTop: 2 },
+  sharedBy: { fontSize: 11, color: '#95a5a6', marginTop: 2 },
+  triggerBtn: {
+    width: 40, height: 40, borderRadius: 20, backgroundColor: '#e8f4fd',
+    alignItems: 'center', justifyContent: 'center', marginLeft: 8,
+  },
+  triggerBtnText: { fontSize: 20 },
+
+  settingRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 4,
+  },
+  settingLabel: { fontSize: 14, fontWeight: '600', color: '#2c3e50' },
+  settingHint: { fontSize: 11, color: '#95a5a6', marginTop: 2 },
 
   inviteRow: { flexDirection: 'row', gap: 10 },
   inviteInput: {
@@ -369,7 +517,7 @@ const styles = StyleSheet.create({
   tabActive: {
     backgroundColor: '#3498db',
   },
-  tabText: { fontSize: 14, fontWeight: '600', color: '#7f8c8d' },
+  tabText: { fontSize: 13, fontWeight: '600', color: '#7f8c8d' },
   tabTextActive: { color: '#fff' },
 
   activityRow: {
