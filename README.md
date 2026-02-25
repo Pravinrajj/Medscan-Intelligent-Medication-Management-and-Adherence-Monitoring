@@ -117,37 +117,27 @@ OCRMetadata
 
 ## Project Structure
 
-```
+```yaml
 MedScan/
-├── backend/                          # Spring Boot 3.2.5
-│   ├── src/main/java/com/medscan/backend/
-│   │   ├── config/                   # Security, validation configuration
-│   │   ├── controller/               # 9 REST controllers (Auth, Schedule, Adherence, etc.)
-│   │   ├── service/                  # 9 services (business logic)
-│   │   ├── model/                    # 15+ JPA entities
-│   │   ├── repository/               # 6 MySQL + 2 MongoDB repositories
-│   │   └── security/                 # JWT authentication
-│   ├── src/test/java/                # Unit tests
-│   └── pom.xml                       # Maven dependencies
-│
-├── mobile-app/                       # React Native + Expo SDK 54
-│   ├── src/
-│   │   ├── screens/                  # 13 screens (Login, Dashboard, AddMedicine, etc.)
-│   │   ├── components/               # Reusable UI components
-│   │   ├── context/                  # AuthContext (global state)
-│   │   ├── api/                      # Axios HTTP client
-│   │   └── services/                 # OfflineSyncService, NotificationService
-│   ├── App.js                        # Navigation root
-│   ├── package.json                  # Dependencies
-│   └── app.json                      # Expo config
-│
-├── ml-service/                       # Python FastAPI
-│   ├── main.py                       # OCR & barcode endpoints
-│   └── requirements.txt              # Python dependencies
-│
-├── datasets/                         # CSV data files
-├── README.md                         # This file
-└── PROJECT_DOCUMENTATION.md          # Detailed SRS & design
+  backend/:                          # Spring Boot 3.2.5
+    src/main/java/com/medscan/backend/
+      config/:                       # Security config
+      controller/:                   # 9 REST controllers
+      service/:                      # Business logic
+    src/test/java/                   # Unit tests
+    pom.xml                          # Maven dependencies
+
+  mobile-app/:                       # React Native + Expo
+    src/
+      screens/:                      # 13 UI screens
+      components/:                   # Reusable UI
+    App.js                           # Navigation root
+    package.json                     # Dependencies
+
+  ml-service/:                       # Python FastAPI
+    main.py                          # OCR & barcode
+    requirements.txt                 # Dependencies
+
 ```
 
 **Backend Services:**
