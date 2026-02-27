@@ -34,12 +34,15 @@ public class GroupService {
     @Autowired
     private PushNotificationService pushNotificationService;
 
-    public CareGroup createGroup(Long adminId, String groupName) {
+    public CareGroup createGroup(Long adminId, String groupName, String description) {
         User admin = userRepository.findById(adminId)
                 .orElseThrow(() -> new RuntimeException("Admin not found"));
         CareGroup group = new CareGroup();
         group.setAdmin(admin);
         group.setGroupName(groupName);
+        if (description != null && !description.trim().isEmpty()) {
+            group.setDescription(description.trim());
+        }
         CareGroup saved = careGroupRepository.save(group);
 
         groupActivityRepository.save(new GroupActivity(
@@ -88,7 +91,7 @@ public class GroupService {
         return userRepository.findByPhoneNumberIn(allVariants.stream().distinct().collect(Collectors.toList()));
     }
 
-    public List<CareGroup> getUserGroups(Long userId) {
+    public List<Map<String, Object>> getUserGroups(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
         
@@ -101,7 +104,23 @@ public class GroupService {
                 allGroups.add(gm.getGroup());
             }
         }
-        return allGroups;
+        
+        // Enrich each group with member count
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (CareGroup g : allGroups) {
+            Map<String, Object> groupMap = new java.util.LinkedHashMap<>();
+            groupMap.put("id", g.getId());
+            groupMap.put("groupName", g.getGroupName());
+            groupMap.put("description", g.getDescription());
+            groupMap.put("admin", g.getAdmin());
+            groupMap.put("allowMemberTriggers", g.getAllowMemberTriggers());
+            groupMap.put("createdAt", g.getCreatedAt());
+            // Count members: admin + group_members entries
+            int memberCount = 1 + groupMemberRepository.findByGroup(g).size();
+            groupMap.put("memberCount", memberCount);
+            result.add(groupMap);
+        }
+        return result;
     }
 
     public List<User> getGroupMembers(Long groupId) {
@@ -244,6 +263,12 @@ public class GroupService {
             throw new RuntimeException("Only the group admin can update settings");
         }
 
+        if (settings.containsKey("groupName")) {
+            String newName = settings.get("groupName").toString().trim();
+            if (!newName.isEmpty()) {
+                group.setGroupName(newName);
+            }
+        }
         if (settings.containsKey("allowMemberTriggers")) {
             group.setAllowMemberTriggers(Boolean.valueOf(settings.get("allowMemberTriggers").toString()));
         }

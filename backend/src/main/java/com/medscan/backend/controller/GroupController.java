@@ -21,8 +21,8 @@ public class GroupController {
     private GroupService groupService;
 
     @PostMapping("/create")
-    public ResponseEntity<CareGroup> createGroup(@RequestParam Long adminId, @RequestParam String groupName) {
-        return ResponseEntity.ok(groupService.createGroup(adminId, groupName));
+    public ResponseEntity<CareGroup> createGroup(@RequestParam Long adminId, @RequestParam String groupName, @RequestParam(required = false) String description) {
+        return ResponseEntity.ok(groupService.createGroup(adminId, groupName, description));
     }
 
     @PostMapping("/{groupId}/add-member")
@@ -40,7 +40,7 @@ public class GroupController {
     }
 
     @GetMapping("/user/{userId}")
-    public ResponseEntity<List<CareGroup>> getUserGroups(@PathVariable Long userId) {
+    public ResponseEntity<?> getUserGroups(@PathVariable Long userId) {
         return ResponseEntity.ok(groupService.getUserGroups(userId));
     }
 

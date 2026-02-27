@@ -20,7 +20,7 @@ public class MedicineService implements CommandLineRunner {
 
     public Medicine saveMedicine(Medicine medicine) {
         // Find-or-create: avoid duplicates by name
-        Medicine existing = medicineRepository.findByNameIgnoreCase(medicine.getName());
+        Medicine existing = medicineRepository.findFirstByNameIgnoreCase(medicine.getName());
         if (existing != null) {
             return existing;
         }
