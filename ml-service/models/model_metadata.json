@@ -1,0 +1,15 @@
+{
+  "model_version": "v1.0",
+  "architecture": "EfficientNet-B0",
+  "num_classes": 78,
+  "image_size": 224,
+  "best_val_accuracy": 63.21,
+  "test_accuracy": 40.9,
+  "training_images": 3120,
+  "total_training_time_seconds": 2211.6,
+  "trained_on": "GPU",
+  "gpu_name": "Tesla T4",
+  "framework": "PyTorch 2.10.0+cu128",
+  "date": "2026-03-03T03:32:27.813858",
+  "early_stopped_at_epoch": 28
+}
