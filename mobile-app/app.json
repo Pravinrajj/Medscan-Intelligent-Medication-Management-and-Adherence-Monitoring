@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "mobile-app",
+    "name": "MedScan",
     "slug": "mobile-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -21,13 +21,27 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.anonymous.mobileapp"
+      "package": "com.medscan.app",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#3498db"
+        }
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Allow MedScan to access your contacts to find friends and family on MedScan."
+        }
+      ]
     ]
   }
 }

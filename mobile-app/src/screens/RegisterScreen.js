@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 40,
     borderBottomRightRadius: 40,
   },
-  logo: { fontSize: 40 },
+  logo: { fontSize: 40},
   appName: { fontSize: 24, fontWeight: '800', color: '#fff', marginTop: 4 },
 
   formSection: {

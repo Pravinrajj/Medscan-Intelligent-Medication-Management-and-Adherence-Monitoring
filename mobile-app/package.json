@@ -17,6 +17,7 @@
     "@react-navigation/native-stack": "^7.0.0",
     "axios": "^1.7.9",
     "expo": "~54.0.32",
+    "expo-contacts": "~15.0.11",
     "expo-device": "~8.0.10",
     "expo-image-picker": "~17.0.10",
     "expo-local-authentication": "~17.0.8",

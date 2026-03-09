@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
   },
   logo: { fontSize: 56 },
   appName: { fontSize: 32, fontWeight: '800', color: '#fff', marginTop: 8 },
-  tagline: { fontSize: 14, color: 'rgba(255,255,255,0.8)', marginTop: 4 },
+  tagline: { fontSize: 14, color: 'rgba(255, 255, 255, 0.72)', marginTop: 4 },
 
   formSection: {
     flex: 0.65,
