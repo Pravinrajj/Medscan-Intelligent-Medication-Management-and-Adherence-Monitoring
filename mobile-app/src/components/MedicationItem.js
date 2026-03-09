@@ -58,7 +58,7 @@ const getTimeStatus = (scheduleTimes, frequencyType) => {
   return { isActive: false, statusText: 'All doses done for today', isAsNeeded: false };
 };
 
-const MedicationItem = ({ schedule, onTaken, onMissed, onSnooze, onPress, loggedToday }) => {
+const MedicationItem = ({ schedule, onTaken, onMissed, onSnooze, onPress, loggedToday, snoozedToday }) => {
   const medicine = schedule?.medicine || {};
   const scheduleTimes = schedule?.scheduleTimes || [];
   const frequencyType = schedule?.frequencyType;
@@ -101,10 +101,11 @@ const MedicationItem = ({ schedule, onTaken, onMissed, onSnooze, onPress, logged
         <Text style={[
           styles.statusText, 
           loggedToday ? styles.statusDone :
+          snoozedToday ? styles.statusSnoozed :
           timeStatus.statusText.includes('Overdue') ? styles.statusOverdue :
           styles.statusUpcoming
         ]}>
-          {loggedToday ? '✅ Recorded today' : timeStatus.statusText}
+          {loggedToday ? '✅ Recorded today' : snoozedToday ? '⏰ Snoozed — will remind again' : timeStatus.statusText}
         </Text>
         
         {onPress && <Text style={styles.tapHint}>Tap for details →</Text>}
@@ -213,6 +214,9 @@ const styles = StyleSheet.create({
   statusUpcoming: {
     color: '#95a5a6',
   },
+  statusSnoozed: {
+    color: '#f39c12',
+  },
   tapHint: {
     fontSize: 11,
     color: '#bdc3c7',
@@ -221,6 +225,8 @@ const styles = StyleSheet.create({
   actions: {
     alignItems: 'center',
     gap: 6,
+    flexShrink: 0,
+    minWidth: 80,
   },
   takeButton: {
     backgroundColor: '#2ecc71',

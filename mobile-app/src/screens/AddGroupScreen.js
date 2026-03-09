@@ -1,5 +1,6 @@
 import React, { useState, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, ActivityIndicator } from 'react-native';
+import * as Contacts from 'expo-contacts';
 import api from '../api/client';
 import { AuthContext } from '../context/AuthContext';
 
@@ -12,6 +13,10 @@ const AddGroupScreen = ({ navigation }) => {
   const [selectedMembers, setSelectedMembers] = useState([]);
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [contactLoading, setContactLoading] = useState(false);
+  const [contactMatches, setContactMatches] = useState([]);
+  const [showContactMatches, setShowContactMatches] = useState(false);
+  const [phoneToContactName, setPhoneToContactName] = useState({});
 
   const searchByPhone = async (query) => {
     setMemberSearch(query);
@@ -23,12 +28,14 @@ const AddGroupScreen = ({ navigation }) => {
 
     setSearching(true);
     try {
-      // Use the contact matching endpoint
       const res = await api.post('/groups/contacts/check', [query.trim()]);
-      // Filter out already selected members and current user
+      // For manual search, limit displayed info for privacy
       const filtered = (res.data || []).filter(
         u => u.id !== userInfo.id && !selectedMembers.find(m => m.id === u.id)
-      );
+      ).map(u => ({
+        ...u,
+        displayName: 'Registered User',  // Don't reveal real name from DB for manual search
+      }));
       setSearchResults(filtered);
     } catch (e) {
       console.log('[AddGroup] Search failed:', e.message);
@@ -38,10 +45,92 @@ const AddGroupScreen = ({ navigation }) => {
     }
   };
 
+  const handleFromContacts = async () => {
+    setContactLoading(true);
+    try {
+      const { status } = await Contacts.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please allow access to contacts to find MedScan users.');
+        setContactLoading(false);
+        return;
+      }
+
+      const { data } = await Contacts.getContactsAsync({
+        fields: [Contacts.Fields.PhoneNumbers],
+      });
+
+      if (!data || data.length === 0) {
+        Alert.alert('No Contacts', 'No contacts found on this device.');
+        setContactLoading(false);
+        return;
+      }
+
+      const phoneNumbers = [];
+      const phoneToContact = {};
+      data.forEach(contact => {
+        (contact.phoneNumbers || []).forEach(phone => {
+          const normalized = phone.number.replace(/[\s\-\(\)\+]/g, '');
+          const last10 = normalized.slice(-10);
+          if (last10.length >= 10) {
+            phoneNumbers.push(last10);
+            phoneToContact[last10] = contact.name || 'Contact';
+          }
+        });
+      });
+
+      setPhoneToContactName(phoneToContact);
+
+      if (phoneNumbers.length === 0) {
+        Alert.alert('No Phone Numbers', 'None of your contacts have phone numbers.');
+        setContactLoading(false);
+        return;
+      }
+
+      // Send to backend for matching (in batches of 100)
+      const allMatched = [];
+      for (let i = 0; i < phoneNumbers.length; i += 100) {
+        const batch = phoneNumbers.slice(i, i + 100);
+        try {
+          const res = await api.post('/groups/contacts/check', batch);
+          allMatched.push(...(res.data || []));
+        } catch (e) {
+          console.log('[AddGroup] Contact batch check failed:', e.message);
+        }
+      }
+
+      // De-duplicate and filter out self + already-selected
+      const seen = new Set();
+      const matches = allMatched.filter(u => {
+        if (u.id === userInfo.id || selectedMembers.find(m => m.id === u.id) || seen.has(u.id)) return false;
+        seen.add(u.id);
+        return true;
+      }).map(u => {
+        // Find contact name from device by matching phone
+        const userPhone = (u.phoneNumber || '').replace(/[^0-9]/g, '').slice(-10);
+        const contactName = phoneToContact[userPhone] || 'Contact';
+        return { ...u, displayName: contactName };
+      });
+
+      if (matches.length === 0) {
+        Alert.alert('No Matches', 'None of your contacts are registered on MedScan.');
+      } else {
+        setContactMatches(matches);
+        setShowContactMatches(true);
+      }
+    } catch (e) {
+      console.log('[AddGroup] Contact access error:', e.message);
+      Alert.alert('Error', 'Failed to access contacts.');
+    } finally {
+      setContactLoading(false);
+    }
+  };
+
   const addMember = (user) => {
     setSelectedMembers([...selectedMembers, user]);
     setSearchResults([]);
     setMemberSearch('');
+    // Also remove from contact matches if present
+    setContactMatches(prev => prev.filter(m => m.id !== user.id));
   };
 
   const removeMember = (userId) => {
@@ -56,8 +145,15 @@ const AddGroupScreen = ({ navigation }) => {
 
     setSaving(true);
     try {
-      // Step 1: Create the group
-      const groupRes = await api.post(`/groups/create?adminId=${userInfo.id}&groupName=${encodeURIComponent(name.trim())}`);
+      // Step 1: Create the group with description
+      const params = new URLSearchParams({
+        adminId: userInfo.id.toString(),
+        groupName: name.trim(),
+      });
+      if (description.trim()) {
+        params.append('description', description.trim());
+      }
+      const groupRes = await api.post(`/groups/create?${params.toString()}`);
       const groupId = groupRes.data.id;
 
       // Step 2: Add each selected member
@@ -105,6 +201,41 @@ const AddGroupScreen = ({ navigation }) => {
 
         <Text style={styles.sectionTitle}>Add Members</Text>
 
+        {/* From Contacts Button */}
+        <TouchableOpacity style={styles.contactsBtn} onPress={handleFromContacts} disabled={contactLoading}>
+          {contactLoading ? (
+            <ActivityIndicator size="small" color="#3498db" />
+          ) : (
+            <Text style={styles.contactsBtnText}>📱 From Contacts</Text>
+          )}
+        </TouchableOpacity>
+
+        {/* Contact Matches */}
+        {showContactMatches && contactMatches.length > 0 && (
+          <View style={styles.contactMatchesSection}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <Text style={styles.selectedTitle}>Found on MedScan ({contactMatches.length})</Text>
+              <TouchableOpacity onPress={() => setShowContactMatches(false)}>
+                <Text style={{ color: '#95a5a6', fontSize: 12 }}>Hide</Text>
+              </TouchableOpacity>
+            </View>
+            {contactMatches.map(user => (
+              <TouchableOpacity key={user.id} style={styles.searchResultItem} onPress={() => addMember(user)}>
+                <View style={styles.userAvatar}>
+                  <Text style={styles.userAvatarText}>{(user.displayName || 'C')[0].toUpperCase()}</Text>
+                </View>
+                <View style={styles.userInfo}>
+                  <Text style={styles.userName}>{user.displayName || 'Contact'}</Text>
+                  <Text style={styles.userPhone}>{user.phoneNumber || '—'}</Text>
+                </View>
+                <Text style={styles.addIcon}>+</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* Manual phone search fallback */}
+        <Text style={[styles.label, { marginTop: 12 }]}>Or search by phone number</Text>
         <TextInput
           style={styles.input}
           value={memberSearch}
@@ -121,11 +252,11 @@ const AddGroupScreen = ({ navigation }) => {
             {searchResults.map(user => (
               <TouchableOpacity key={user.id} style={styles.searchResultItem} onPress={() => addMember(user)}>
                 <View style={styles.userAvatar}>
-                  <Text style={styles.userAvatarText}>{(user.fullName || user.username || '?')[0].toUpperCase()}</Text>
+                  <Text style={styles.userAvatarText}>R</Text>
                 </View>
                 <View style={styles.userInfo}>
-                  <Text style={styles.userName}>{user.fullName || user.username}</Text>
-                  <Text style={styles.userPhone}>{user.phoneNumber || '—'}</Text>
+                  <Text style={styles.userName}>{user.displayName || 'Registered User'}</Text>
+                  <Text style={styles.userPhone}>Match found</Text>
                 </View>
                 <Text style={styles.addIcon}>+</Text>
               </TouchableOpacity>
@@ -175,7 +306,7 @@ const AddGroupScreen = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f6f9fc' },
-  scrollContent: { padding: 20, paddingBottom: 40 },
+  scrollContent: { padding: 20, paddingBottom: 120 },
 
   sectionTitle: { fontSize: 18, fontWeight: '700', color: '#34495e', marginBottom: 12, marginTop: 16 },
   label: { fontSize: 13, fontWeight: '700', color: '#34495e', marginBottom: 6, marginTop: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
@@ -185,6 +316,18 @@ const styles = StyleSheet.create({
     borderRadius: 12, padding: 14, fontSize: 16, color: '#2c3e50',
   },
   textArea: { height: 80, textAlignVertical: 'top' },
+
+  contactsBtn: {
+    backgroundColor: '#e8f4fd', paddingVertical: 14, borderRadius: 12,
+    alignItems: 'center', borderWidth: 1, borderColor: '#bee3f8',
+    marginBottom: 12,
+  },
+  contactsBtnText: { fontSize: 15, fontWeight: '600', color: '#2980b9' },
+
+  contactMatchesSection: {
+    backgroundColor: '#f0fdf4', borderRadius: 12, padding: 12,
+    marginBottom: 12, borderWidth: 1, borderColor: '#bbf7d0',
+  },
 
   searchResults: {
     backgroundColor: '#fff', borderRadius: 12, borderWidth: 1,

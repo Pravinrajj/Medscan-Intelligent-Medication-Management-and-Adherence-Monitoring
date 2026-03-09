@@ -28,6 +28,7 @@ const DashboardScreen = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
   const [loggedSchedules, setLoggedSchedules] = useState(new Set());
+  const [snoozedSchedules, setSnoozedSchedules] = useState(new Set());
   const [isOnline, setIsOnline] = useState(true);
   const [cachedAt, setCachedAt] = useState(null);
   const [isFromCache, setIsFromCache] = useState(false);
@@ -195,7 +196,7 @@ const DashboardScreen = ({ navigation }) => {
       } else {
         Alert.alert("Snoozed ⏰", "We'll remind you again later.");
       }
-      setLoggedSchedules(prev => new Set([...prev, scheduleId]));
+      setSnoozedSchedules(prev => new Set([...prev, scheduleId]));
       fetchData();
     } catch (e) {
       console.error(e);
@@ -228,17 +229,6 @@ const DashboardScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      {/* Offline Banner */}
-      {!isOnline && (
-        <View style={{backgroundColor: '#e74c3c', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, marginBottom: 10, flexDirection: 'row', alignItems: 'center'}}>
-          <Text style={{color: '#fff', fontWeight: '600', flex: 1}}>📡 You're offline — actions will be saved and synced later</Text>
-        </View>
-      )}
-      {isFromCache && cachedAt && (
-        <View style={{backgroundColor: '#f39c12', paddingVertical: 6, paddingHorizontal: 16, borderRadius: 8, marginBottom: 10, flexDirection: 'row', alignItems: 'center'}}>
-          <Text style={{color: '#fff', fontWeight: '600', flex: 1, fontSize: 12}}>📦 Showing cached data — last updated {formatCacheAge(cachedAt)}</Text>
-        </View>
-      )}
       <ScrollView 
         refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -252,6 +242,18 @@ const DashboardScreen = ({ navigation }) => {
             </View>
         </View>
 
+        {/* Offline / Cache banners — compact, non-overlapping */}
+        {!isOnline && (
+          <View style={styles.offlineBanner}>
+            <Text style={styles.offlineBannerText}>📡 Offline — actions saved locally</Text>
+          </View>
+        )}
+        {isFromCache && cachedAt && (
+          <View style={styles.cacheBanner}>
+            <Text style={styles.cacheBannerText}>📦 Cached data — {formatCacheAge(cachedAt)}</Text>
+          </View>
+        )}
+
         {/* Low Stock Alert */}
         {lowStockItems.length > 0 && (
             <View style={styles.alertCard}>
@@ -264,45 +266,12 @@ const DashboardScreen = ({ navigation }) => {
             </View>
         )}
 
-        {/* Adherence Stats */}
-        {stats && (
-            <View style={styles.statsCard}>
-                <Text style={styles.statsTitle}>Today's Adherence</Text>
-                <View style={styles.adherenceRow}>
-                    <Text style={[styles.adherenceRate, { color: getAdherenceColor(stats.adherenceRate || 0) }]}>
-                        {stats.adherenceRate || 0}%
-                    </Text>
-                </View>
-                <View style={styles.statsGrid}>
-                    <View style={styles.statItem}>
-                        <Text style={styles.statValue}>{stats.takenCount || 0}</Text>
-                        <Text style={styles.statLabel}>Taken</Text>
-                    </View>
-                    <View style={styles.statItem}>
-                        <Text style={styles.statValue}>{stats.snoozedCount || 0}</Text>
-                        <Text style={styles.statLabel}>Snoozed</Text>
-                    </View>
-                    <View style={styles.statItem}>
-                        <Text style={styles.statValue}>{stats.missedCount || 0}</Text>
-                        <Text style={styles.statLabel}>Missed</Text>
-                    </View>
-                </View>
-            </View>
-        )}
-
-        {/* Adherence Chart */}
-        <AdherenceChart dailyBreakdown={stats?.dailyBreakdown} />
-
+        {/* ===== SCHEDULES FIRST — the primary content ===== */}
         <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Today's Schedule</Text>
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-                <TouchableOpacity onPress={() => navigation.navigate('AddMedicine')}>
-                    <Text style={styles.addLink}>+ Add</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => navigation.navigate('ScanPrescription')}>
-                    <Text style={styles.scanLink}>📷 Scan</Text>
-                </TouchableOpacity>
-            </View>
+            <TouchableOpacity onPress={() => navigation.navigate('ScanPrescription')}>
+                <Text style={styles.scanLink}>📷 Scan</Text>
+            </TouchableOpacity>
         </View>
         
         {schedules.length === 0 ? (
@@ -325,12 +294,53 @@ const DashboardScreen = ({ navigation }) => {
                       onSnooze={() => handleSnooze(item.id)}
                       onPress={() => navigation.navigate('MedicineDetail', { schedule: item })} 
                       loggedToday={loggedSchedules.has(item.id)}
+                      snoozedToday={snoozedSchedules.has(item.id)}
                     />
                 ))}
             </View>
         )}
+
+        {/* ===== STATS & CHART — below schedules ===== */}
+        {stats && (
+            <View style={styles.statsCompact}>
+                <View style={styles.statsRow}>
+                    <View style={styles.statPill}>
+                        <Text style={[styles.statPillValue, { color: getAdherenceColor(stats.adherenceRate || 0) }]}>
+                            {stats.adherenceRate || 0}%
+                        </Text>
+                        <Text style={styles.statPillLabel}>Adherence</Text>
+                    </View>
+                    <View style={styles.statPill}>
+                        <Text style={styles.statPillValue}>{stats.takenCount || 0}</Text>
+                        <Text style={styles.statPillLabel}>Taken</Text>
+                    </View>
+                    <View style={styles.statPill}>
+                        <Text style={styles.statPillValue}>{stats.snoozedCount || 0}</Text>
+                        <Text style={styles.statPillLabel}>Snoozed</Text>
+                    </View>
+                    <View style={styles.statPill}>
+                        <Text style={styles.statPillValue}>{stats.missedCount || 0}</Text>
+                        <Text style={styles.statPillLabel}>Missed</Text>
+                    </View>
+                </View>
+            </View>
+        )}
+
+        {/* Weekly Chart */}
+        <AdherenceChart dailyBreakdown={stats?.dailyBreakdown} />
+
       </ScrollView>
 
+      {/* Floating Add Button — visible only when there are schedules */}
+      {schedules.length > 0 && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => navigation.navigate('AddMedicine')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.fabText}>+</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 };
@@ -341,12 +351,26 @@ const styles = StyleSheet.create({
   header: {
     padding: 25, paddingTop: 50, backgroundColor: '#ffffff',
     borderBottomLeftRadius: 24, borderBottomRightRadius: 24,
-    marginBottom: 16,
+    marginBottom: 12,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05, shadowRadius: 8, elevation: 3,
   },
   welcomeLabel: { color: '#95a5a6', fontSize: 14, fontWeight: '500' },
   username: { fontSize: 22, fontWeight: '800', color: '#2c3e50', marginTop: 2 },
+
+  // Compact banners — inside ScrollView, small text, no overlap
+  offlineBanner: {
+    backgroundColor: '#fef2f2', marginHorizontal: 16, marginBottom: 8,
+    paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10,
+    borderLeftWidth: 3, borderLeftColor: '#e74c3c',
+  },
+  offlineBannerText: { fontSize: 12, fontWeight: '600', color: '#c0392b' },
+  cacheBanner: {
+    backgroundColor: '#fffbeb', marginHorizontal: 16, marginBottom: 8,
+    paddingVertical: 6, paddingHorizontal: 14, borderRadius: 10,
+    borderLeftWidth: 3, borderLeftColor: '#f39c12',
+  },
+  cacheBannerText: { fontSize: 11, fontWeight: '600', color: '#e67e22' },
 
   alertCard: {
     backgroundColor: '#fff8e1', borderRadius: 12, padding: 14,
@@ -355,26 +379,11 @@ const styles = StyleSheet.create({
   alertTitle: { fontWeight: '700', fontSize: 15, color: '#e67e22', marginBottom: 6 },
   alertText: { color: '#795548', fontSize: 13, marginBottom: 2 },
 
-  statsCard: {
-    backgroundColor: '#fff', borderRadius: 16, padding: 20,
-    marginHorizontal: 16, marginBottom: 16,
-    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 4,
-  },
-  statsTitle: { fontSize: 16, fontWeight: '700', color: '#34495e', marginBottom: 10, textAlign: 'center' },
-  adherenceRow: { alignItems: 'center', marginBottom: 12 },
-  adherenceRate: { fontSize: 36, fontWeight: '800' },
-  statsGrid: { flexDirection: 'row', justifyContent: 'space-around' },
-  statItem: { alignItems: 'center' },
-  statValue: { fontSize: 20, fontWeight: '700', color: '#2c3e50' },
-  statLabel: { fontSize: 12, color: '#95a5a6', marginTop: 2 },
-
   sectionHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 16, marginBottom: 10, marginTop: 6,
   },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: '#2c3e50' },
-  addLink: { fontSize: 14, color: '#27ae60', fontWeight: '700' },
   scanLink: { fontSize: 14, color: '#3498db', fontWeight: '600' },
 
   emptyContainer: { alignItems: 'center', paddingVertical: 40, paddingHorizontal: 16 },
@@ -388,6 +397,32 @@ const styles = StyleSheet.create({
   addMedText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 
   listContainer: { paddingHorizontal: 16 },
+
+  // Compact stats row — below schedules
+  statsCompact: {
+    marginHorizontal: 16, marginTop: 16, marginBottom: 8,
+  },
+  statsRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+  },
+  statPill: {
+    flex: 1, alignItems: 'center', backgroundColor: '#fff',
+    paddingVertical: 10, borderRadius: 12, marginHorizontal: 3,
+    elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04, shadowRadius: 2,
+  },
+  statPillValue: { fontSize: 18, fontWeight: '800', color: '#2c3e50' },
+  statPillLabel: { fontSize: 10, color: '#95a5a6', fontWeight: '600', marginTop: 2 },
+
+  fab: {
+    position: 'absolute', bottom: 90, right: 20,
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: '#3498db', alignItems: 'center', justifyContent: 'center',
+    elevation: 6,
+    shadowColor: '#3498db', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35, shadowRadius: 8,
+  },
+  fabText: { color: '#fff', fontSize: 28, fontWeight: '600', marginTop: -2 },
 });
 
 export default DashboardScreen;

@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
 
   createButton: {
     position: 'absolute',
-    bottom: 90,
+    bottom: 100,
     left: 20,
     right: 20,
     backgroundColor: '#3498db',

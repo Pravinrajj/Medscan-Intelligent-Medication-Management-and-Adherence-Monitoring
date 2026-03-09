@@ -114,7 +114,9 @@ export async function registerForPushNotificationsAsync(userId) {
   }
 
   try {
-    const token = (await Notifications.getExpoPushTokenAsync()).data;
+    const token = (await Notifications.getExpoPushTokenAsync({
+      projectId: 'medscan-20d95', // Must match your Firebase project ID
+    })).data;
     console.log('[Notifications] Push token:', token);
 
     // Register token with backend
@@ -138,7 +140,19 @@ export async function registerForPushNotificationsAsync(userId) {
 
     return token;
   } catch (error) {
-    console.log('[Notifications] Error registering:', error.message);
+    // If Firebase is not configured, fall back to local-only notifications
+    console.log('[Notifications] Push registration skipped:', error.message);
+    
+    // Still set up Android channel for local notifications
+    if (Platform.OS === 'android') {
+      Notifications.setNotificationChannelAsync('medication-reminders', {
+        name: 'Medication Reminders',
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#3498db',
+        sound: 'default',
+      });
+    }
     return null;
   }
 }

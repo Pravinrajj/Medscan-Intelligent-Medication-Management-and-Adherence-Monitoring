@@ -1,6 +1,7 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Switch } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { AuthContext } from '../context/AuthContext';
 import api from '../api/client';
 
@@ -38,6 +39,29 @@ const ProfileScreen = ({ navigation }) => {
   };
 
   const handleToggleBiometric = async (value) => {
+    if (value) {
+      // Verify device ownership before enabling
+      try {
+        const hasHardware = await LocalAuthentication.hasHardwareAsync();
+        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+        if (!hasHardware || !isEnrolled) {
+          Alert.alert('Not Available', 'Your device does not support biometric authentication or no biometric is enrolled.');
+          return;
+        }
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: 'Confirm to enable Screen Lock',
+          fallbackLabel: 'Use Passcode',
+          disableDeviceFallback: false,
+        });
+        if (!result.success) {
+          Alert.alert('Authentication Failed', 'Screen Lock was not enabled.');
+          return;
+        }
+      } catch (e) {
+        Alert.alert('Error', 'Could not verify authentication.');
+        return;
+      }
+    }
     setBiometricEnabled(value);
     await AsyncStorage.setItem('biometric_enabled', String(value));
     if (value) {

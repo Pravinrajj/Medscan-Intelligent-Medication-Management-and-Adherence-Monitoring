@@ -28,7 +28,7 @@ const MedicineDetailScreen = ({ navigation, route }) => {
       const res = await api.get(`/medicines/drug-info?name=${encodeURIComponent(medicine.name)}`);
       setDrugInfo(res.data);
     } catch (e) {
-      console.log('[MedicineDetail] Drug info not available:', e.message);
+      // Drug info endpoint may not exist — silently skip
     }
   };
 

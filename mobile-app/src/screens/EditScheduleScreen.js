@@ -355,7 +355,7 @@ const EditScheduleScreen = ({ navigation, route }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f6f9fc' },
-  scrollContent: { padding: 20, paddingBottom: 40 },
+  scrollContent: { padding: 20, paddingBottom: 120 },
 
   medicineHeader: {
     backgroundColor: '#fff', borderRadius: 14, padding: 16,

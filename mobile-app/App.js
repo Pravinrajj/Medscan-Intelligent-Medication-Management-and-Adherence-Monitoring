@@ -54,6 +54,7 @@ const GroupsStack = () => (
     <Stack.Screen name="GroupsMain" component={GroupScreen} options={{ title: 'Groups', headerShown: false }} />
     <Stack.Screen name="AddGroup" component={AddGroupScreen} options={{ title: 'Create Group' }} />
     <Stack.Screen name="GroupDetails" component={GroupDetailsScreen} options={({ route }) => ({ title: route.params?.group?.groupName || route.params?.group?.name || 'Group' })} />
+    <Stack.Screen name="AddMedicineForMember" component={AddMedicineScreen} options={({ route }) => ({ title: `Add Medicine for ${route.params?.targetUserName || 'Member'}` })} />
   </Stack.Navigator>
 );
 

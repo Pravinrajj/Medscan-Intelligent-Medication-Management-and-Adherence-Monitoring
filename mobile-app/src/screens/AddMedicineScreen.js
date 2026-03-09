@@ -1,14 +1,15 @@
-import React, { useState, useContext, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, ActivityIndicator } from 'react-native';
+import React, { useState, useContext, useEffect, useRef } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, ActivityIndicator, Modal, FlatList } from 'react-native';
 import api from '../api/client';
 import { AuthContext } from '../context/AuthContext';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
+// Multiple common options per type + "Other…" free-text
 const TYPE_UNITS = {
-  TABLET: { options: ['Tablet(s)', 'Capsule(s)'], default: 'Tablet(s)', icon: '💊' },
-  SYRUP: { options: ['mL', 'Teaspoon(s)', 'Tablespoon(s)'], default: 'mL', icon: '🧴' },
-  INJECTION: { options: ['mL', 'Unit(s)', 'IU'], default: 'mL', icon: '💉' },
-  OTHER: { options: ['Dose(s)', 'Unit(s)', 'Tablet(s)', 'mL', 'Puff(s)', 'Drop(s)'], default: 'Dose(s)', icon: '💠' },
+  TABLET: { options: ['Tablet(s)', 'Capsule(s)', 'Lozenge(s)'], icon: '💊' },
+  SYRUP: { options: ['mL', 'Teaspoon(s)', 'Tablespoon(s)'], icon: '🧴' },
+  INJECTION: { options: ['mL', 'Unit(s)'], icon: '💉' },
+  OTHER: { options: ['Dose(s)', 'Drop(s)', 'Puff(s)', 'Patch(es)'], icon: '💠' },
 };
 
 const TYPES = Object.keys(TYPE_UNITS);
@@ -31,7 +32,9 @@ const AddMedicineScreen = ({ navigation, route }) => {
   const [name, setName] = useState('');
   const [type, setType] = useState('TABLET');
   const [doseAmount, setDoseAmount] = useState('1');
-  const [doseUnit, setDoseUnit] = useState(TYPE_UNITS.TABLET.default);
+  const [doseUnit, setDoseUnit] = useState(TYPE_UNITS.TABLET.options[0]);
+  const [isCustomUnit, setIsCustomUnit] = useState(false);
+  const [customUnitText, setCustomUnitText] = useState('');
   const [frequencyType, setFrequencyType] = useState('DAILY');
   const [customDays, setCustomDays] = useState([]);
   const [times, setTimes] = useState([new Date()]);
@@ -46,9 +49,35 @@ const AddMedicineScreen = ({ navigation, route }) => {
   const [searchError, setSearchError] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
+  // Unit picker modal
+  const [showUnitPicker, setShowUnitPicker] = useState(false);
+
+  // Flag to prevent re-search after selecting a suggestion
+  const skipSearchRef = useRef(false);
+
   const handleTypeChange = (newType) => {
     setType(newType);
-    setDoseUnit(TYPE_UNITS[newType]?.default || 'Dose(s)');
+    const firstOption = TYPE_UNITS[newType]?.options?.[0] || 'Dose(s)';
+    setDoseUnit(firstOption);
+    setIsCustomUnit(false);
+    setCustomUnitText('');
+  };
+
+  const getUnitOptions = () => {
+    const opts = TYPE_UNITS[type]?.options || ['Dose(s)'];
+    return [...opts, 'Other…'];
+  };
+
+  const handleUnitSelect = (unit) => {
+    setShowUnitPicker(false);
+    if (unit === 'Other…') {
+      setIsCustomUnit(true);
+      setDoseUnit('');
+      setCustomUnitText('');
+    } else {
+      setIsCustomUnit(false);
+      setDoseUnit(unit);
+    }
   };
 
   // Pre-fill from scan results if available
@@ -64,15 +93,27 @@ const AddMedicineScreen = ({ navigation, route }) => {
     }
   }, [route.params]);
 
-  // Autocomplete search — local medicines table only (skip DrugLookup)
+  // Autocomplete search with deduplication
   useEffect(() => {
     const searchTimer = setTimeout(async () => {
+      if (skipSearchRef.current) {
+        skipSearchRef.current = false;
+        return;
+      }
       if (name.length >= 2) {
         setSearchLoading(true);
         setSearchError(false);
         try {
           const res = await api.get(`/medicines/search?query=${encodeURIComponent(name)}`);
-          setSearchResults(res.data.slice(0, 8));
+          // Deduplicate by name (case-insensitive) — keep first match
+          const seen = new Set();
+          const deduped = (res.data || []).filter(item => {
+            const key = (item.name || item.medicineName || '').toLowerCase().trim();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+          setSearchResults(deduped.slice(0, 8));
           setShowSuggestions(true);
         } catch (e) {
           console.log('[Search] Error:', e.message);
@@ -90,6 +131,7 @@ const AddMedicineScreen = ({ navigation, route }) => {
   }, [name]);
 
   const selectSuggestion = (item) => {
+    skipSearchRef.current = true;
     setName(item.name || item.medicineName || '');
     if (item.type) {
       const t = String(item.type).toUpperCase();
@@ -139,6 +181,11 @@ const AddMedicineScreen = ({ navigation, route }) => {
       Alert.alert('Error', 'Please enter a dosage amount.');
       return;
     }
+    const finalUnit = isCustomUnit ? customUnitText.trim() : doseUnit;
+    if (!finalUnit) {
+      Alert.alert('Error', 'Please specify the dose unit.');
+      return;
+    }
     if (frequencyType === 'CUSTOM' && customDays.length === 0) {
       Alert.alert('Error', 'Please select at least one day for custom frequency.');
       return;
@@ -158,7 +205,7 @@ const AddMedicineScreen = ({ navigation, route }) => {
       const schedulePayload = {
         startDate: today,
         doseAmount: parseFloat(doseAmount) || 1,
-        doseUnit: doseUnit,
+        doseUnit: finalUnit,
         frequencyType: frequencyType === 'CUSTOM' ? 'SPECIFIC_DAYS' : frequencyType,
         currentStock: currentStock.trim() ? parseInt(currentStock) : null,
       };
@@ -190,7 +237,6 @@ const AddMedicineScreen = ({ navigation, route }) => {
     }
   };
 
-  const unitOptions = TYPE_UNITS[type]?.options || TYPE_UNITS.OTHER.options;
   const isAsNeeded = frequencyType === 'AS_NEEDED';
 
   return (
@@ -220,13 +266,17 @@ const AddMedicineScreen = ({ navigation, route }) => {
           {/* Search Results — absolute positioned dropdown */}
           {showSuggestions && searchResults.length > 0 && (
             <View style={styles.suggestionsDropdown}>
-              {searchResults.map((item, idx) => (
-                <TouchableOpacity key={idx} style={styles.suggestionItem} onPress={() => selectSuggestion(item)}>
-                  <Text style={styles.suggestionName}>{item.name || item.medicineName}</Text>
-                  {item.manufacturer && <Text style={styles.suggestionInfo}>{item.manufacturer}</Text>}
-                  {item.dosageStrength && <Text style={styles.suggestionInfo}>{item.dosageStrength}</Text>}
-                </TouchableOpacity>
-              ))}
+              <ScrollView style={{ maxHeight: 240 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+                {searchResults.map((item, idx) => (
+                  <TouchableOpacity key={idx} style={styles.suggestionItem} onPress={() => selectSuggestion(item)}>
+                    <Text style={styles.suggestionName}>{item.name || item.medicineName}</Text>
+                    {item.description ? (
+                      <Text style={styles.suggestionDesc} numberOfLines={2}>{item.description}</Text>
+                    ) : null}
+                    {item.manufacturer && <Text style={styles.suggestionInfo}>{item.manufacturer}{item.dosageStrength ? ` · ${item.dosageStrength}` : ''}</Text>}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
             </View>
           )}
         </View>
@@ -264,19 +314,44 @@ const AddMedicineScreen = ({ navigation, route }) => {
             placeholderTextColor="#bdc3c7"
           />
           <View style={{ flex: 2 }}>
-            <View style={styles.chipRow}>
-              {unitOptions.map(u => (
-                <TouchableOpacity
-                  key={u}
-                  style={[styles.chip, doseUnit === u && styles.chipActive]}
-                  onPress={() => setDoseUnit(u)}
-                >
-                  <Text style={[styles.chipText, doseUnit === u && styles.chipTextActive]}>{u}</Text>
+            {isCustomUnit ? (
+              <TextInput
+                style={styles.input}
+                value={customUnitText}
+                onChangeText={(text) => { setCustomUnitText(text); setDoseUnit(text); }}
+                placeholder="Type unit (e.g., drops, puffs)"
+                placeholderTextColor="#bdc3c7"
+                autoFocus
+              />
+            ) : (
+              <TouchableOpacity style={styles.unitDropdown} onPress={() => setShowUnitPicker(true)}>
+                <Text style={styles.unitDropdownText}>{doseUnit || 'Select unit'}</Text>
+                <Text style={styles.unitDropdownArrow}>▼</Text>
+              </TouchableOpacity>
+            )}
+            {isCustomUnit && (
+              <TouchableOpacity onPress={() => { setIsCustomUnit(false); setDoseUnit(TYPE_UNITS[type]?.primary || 'Dose(s)'); setCustomUnitText(''); }}>
+                <Text style={{ color: '#3498db', fontSize: 12, marginTop: 4 }}>← Back to default</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        {/* Unit Picker Modal */}
+        <Modal visible={showUnitPicker} transparent animationType="fade" onRequestClose={() => setShowUnitPicker(false)}>
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowUnitPicker(false)}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Select Unit</Text>
+              {getUnitOptions().map((unit, idx) => (
+                <TouchableOpacity key={idx} style={styles.modalOption} onPress={() => handleUnitSelect(unit)}>
+                  <Text style={[styles.modalOptionText, unit === doseUnit && styles.modalOptionActive]}>
+                    {unit}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
-          </View>
-        </View>
+          </TouchableOpacity>
+        </Modal>
 
         {/* Frequency */}
         <Text style={styles.label}>Frequency</Text>
@@ -379,7 +454,7 @@ const AddMedicineScreen = ({ navigation, route }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f6f9fc' },
-  scrollContent: { padding: 20, paddingBottom: 40 },
+  scrollContent: { padding: 20, paddingBottom: 120 },
   
   adminBanner: {
     backgroundColor: '#e8f4fd', borderRadius: 12, padding: 14,
@@ -407,15 +482,43 @@ const styles = StyleSheet.create({
   suggestionsDropdown: {
     position: 'absolute', top: 54, left: 0, right: 0, zIndex: 100,
     backgroundColor: '#fff', borderRadius: 12, borderWidth: 1,
-    borderColor: '#e0e6ed', maxHeight: 240,
+    borderColor: '#e0e6ed',
     elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15, shadowRadius: 8,
+    overflow: 'hidden',
   },
   suggestionItem: {
     padding: 12, borderBottomWidth: 1, borderBottomColor: '#f0f0f0',
   },
   suggestionName: { fontSize: 15, fontWeight: '600', color: '#2c3e50' },
+  suggestionDesc: { fontSize: 12, color: '#3498db', marginTop: 3, lineHeight: 16 },
   suggestionInfo: { fontSize: 12, color: '#95a5a6', marginTop: 2 },
+
+  // Unit dropdown button
+  unitDropdown: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    backgroundColor: '#fff', borderWidth: 1, borderColor: '#e0e6ed',
+    borderRadius: 12, padding: 14,
+  },
+  unitDropdownText: { fontSize: 16, color: '#2c3e50', fontWeight: '500' },
+  unitDropdownArrow: { fontSize: 12, color: '#95a5a6' },
+
+  // Unit picker modal
+  modalOverlay: {
+    flex: 1, justifyContent: 'center', alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  modalContent: {
+    backgroundColor: '#fff', borderRadius: 16, padding: 20,
+    width: '75%', maxWidth: 300,
+    elevation: 10,
+  },
+  modalTitle: { fontSize: 16, fontWeight: '700', color: '#34495e', marginBottom: 14, textAlign: 'center' },
+  modalOption: {
+    paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f0f0f0',
+  },
+  modalOptionText: { fontSize: 16, color: '#2c3e50', textAlign: 'center' },
+  modalOptionActive: { color: '#3498db', fontWeight: '700' },
 
   daySelector: { marginTop: 8 },
   dayLabel: { fontSize: 12, color: '#7f8c8d', marginBottom: 8 },
