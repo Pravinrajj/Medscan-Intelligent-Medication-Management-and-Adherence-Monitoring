@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useContext } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ActivityIndicator, TextInput, Modal, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ActivityIndicator, TextInput, Modal, ScrollView, RefreshControl } from 'react-native';
 import * as Contacts from 'expo-contacts';
 import api from '../api/client';
 import { AuthContext } from '../context/AuthContext';
@@ -24,11 +24,19 @@ const GroupDetailsScreen = ({ route, navigation }) => {
 
   // Add member state
   const [addMemberVisible, setAddMemberVisible] = useState(false);
-  const [phoneSearch, setPhoneSearch] = useState('');
-  const [phoneResults, setPhoneResults] = useState([]);
-  const [phoneSearching, setPhoneSearching] = useState(false);
+  const [addMemberSearch, setAddMemberSearch] = useState('');
+  const [contactMedscanUsers, setContactMedscanUsers] = useState([]); // contacts who are on MedScan
+  const [filteredUsers, setFilteredUsers] = useState([]);
+  const [dbSearchResults, setDbSearchResults] = useState([]);
   const [contactLoading, setContactLoading] = useState(false);
-  const [contactMatches, setContactMatches] = useState([]);
+  const [dbSearching, setDbSearching] = useState(false);
+  const [contactNameMap, setContactNameMap] = useState({}); // phone last10 -> contact display name
+
+  // Share schedules picker state
+  const [shareModalVisible, setShareModalVisible] = useState(false);
+  const [userSchedules, setUserSchedules] = useState([]);
+  const [selectedShareIds, setSelectedShareIds] = useState(new Set());
+  const [shareLoading, setShareLoading] = useState(false);
 
   // Group settings state
   const [groupName, setGroupName] = useState(group?.groupName || group?.name || '');
@@ -66,6 +74,33 @@ const GroupDetailsScreen = ({ route, navigation }) => {
     return unsubscribe;
   }, [navigation, fetchData]);
 
+  // A5: Silently load contact name map on mount so member list shows contact names immediately
+  useEffect(() => {
+    const loadContactNames = async () => {
+      try {
+        const { status } = await Contacts.requestPermissionsAsync();
+        if (status !== 'granted') return;
+        const { data } = await Contacts.getContactsAsync({ fields: [Contacts.Fields.PhoneNumbers] });
+        if (!data) return;
+        const phoneMap = {};
+        data.forEach(contact => {
+          const displayName = contact.name || contact.firstName || '';
+          (contact.phoneNumbers || []).forEach(phone => {
+            const normalized = phone.number.replace(/[\s\-\(\)\+]/g, '');
+            const last10 = normalized.slice(-10);
+            if (last10.length >= 10) {
+              phoneMap[last10] = { contactName: displayName, fullNumber: phone.number };
+            }
+          });
+        });
+        setContactNameMap(phoneMap);
+      } catch (e) {
+        // Silent fail — not critical
+      }
+    };
+    loadContactNames();
+  }, []);
+
   const onRefresh = () => {
     setRefreshing(true);
     fetchData();
@@ -100,56 +135,47 @@ const GroupDetailsScreen = ({ route, navigation }) => {
     }
   };
 
-  // — Add Member by phone —
-  const handlePhoneSearch = async (query) => {
-    setPhoneSearch(query);
-    if (query.replace(/\D/g, '').length < 3) {
-      setPhoneResults([]);
-      return;
-    }
-    setPhoneSearching(true);
-    try {
-      const res = await api.post('/groups/contacts/check', [query.trim()]);
-      const filtered = (res.data || []).filter(
-        u => u.id !== userInfo.id && !members.find(m => m.id === u.id)
-      );
-      setPhoneResults(filtered);
-    } catch (e) {
-      setPhoneResults([]);
-    } finally {
-      setPhoneSearching(false);
-    }
-  };
-
-  const handleFromContacts = async () => {
+  // — B1: Open Add Member — auto-load contacts who are MedScan users —
+  const handleOpenAddMember = async () => {
+    setAddMemberVisible(true);
+    setAddMemberSearch('');
+    setDbSearchResults([]);
     setContactLoading(true);
     try {
       const { status } = await Contacts.requestPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please allow access to contacts to find MedScan users.');
+        Alert.alert('Permission Required', 'Allow contacts access to find MedScan users.');
         setContactLoading(false);
         return;
       }
 
       const { data } = await Contacts.getContactsAsync({ fields: [Contacts.Fields.PhoneNumbers] });
       if (!data || data.length === 0) {
-        Alert.alert('No Contacts', 'No contacts found on this device.');
         setContactLoading(false);
         return;
       }
 
-      const phoneNumbers = [];
+      // Build phone -> contact name map
+      const phoneMap = {}; // last10 -> { contactName, fullNumber }
+      const allPhones = [];
       data.forEach(contact => {
+        const displayName = contact.name || contact.firstName || '';
         (contact.phoneNumbers || []).forEach(phone => {
           const normalized = phone.number.replace(/[\s\-\(\)\+]/g, '');
           const last10 = normalized.slice(-10);
-          if (last10.length >= 10) phoneNumbers.push(last10);
+          if (last10.length >= 10) {
+            phoneMap[last10] = { contactName: displayName, fullNumber: phone.number };
+            allPhones.push(last10);
+          }
         });
       });
 
+      setContactNameMap(phoneMap);
+
+      // Check which contacts are registered on MedScan
       const allMatched = [];
-      for (let i = 0; i < phoneNumbers.length; i += 100) {
-        const batch = phoneNumbers.slice(i, i + 100);
+      for (let i = 0; i < allPhones.length; i += 100) {
+        const batch = allPhones.slice(i, i + 100);
         try {
           const res = await api.post('/groups/contacts/check', batch);
           allMatched.push(...(res.data || []));
@@ -158,32 +184,79 @@ const GroupDetailsScreen = ({ route, navigation }) => {
         }
       }
 
+      // Deduplicate, exclude self and existing members, attach contact name
       const seen = new Set();
-      const matches = allMatched.filter(u => {
+      const medscanUsers = allMatched.filter(u => {
         if (u.id === userInfo.id || members.find(m => m.id === u.id) || seen.has(u.id)) return false;
         seen.add(u.id);
         return true;
+      }).map(u => {
+        const phone10 = (u.phoneNumber || '').replace(/[\s\-\(\)\+]/g, '').slice(-10);
+        const contactInfo = phoneMap[phone10];
+        return {
+          ...u,
+          contactName: contactInfo?.contactName || null,
+          displayPhone: contactInfo?.fullNumber || u.phoneNumber,
+        };
       });
 
-      if (matches.length === 0) {
-        Alert.alert('No Matches', 'None of your contacts are registered on MedScan (or all are already members).');
-      } else {
-        setContactMatches(matches);
-      }
+      setContactMedscanUsers(medscanUsers);
+      setFilteredUsers(medscanUsers);
     } catch (e) {
-      Alert.alert('Error', 'Failed to access contacts.');
+      console.log('[GroupDetails] Contact load error:', e.message);
     } finally {
       setContactLoading(false);
+    }
+  };
+
+  // — Integrated search: filter contacts, then fallback to DB —
+  const handleMemberSearch = async (query) => {
+    setAddMemberSearch(query);
+    const digits = query.replace(/\D/g, '');
+
+    if (!query.trim()) {
+      // Empty search — show all contacts
+      setFilteredUsers(contactMedscanUsers);
+      setDbSearchResults([]);
+      return;
+    }
+
+    // Filter local contacts by name or phone
+    const lowerQuery = query.toLowerCase();
+    const localFiltered = contactMedscanUsers.filter(u => {
+      const name = (u.contactName || u.fullName || u.username || '').toLowerCase();
+      const phone = (u.phoneNumber || '');
+      return name.includes(lowerQuery) || phone.includes(digits);
+    });
+    setFilteredUsers(localFiltered);
+
+    // If 10+ digits typed and no local match — search DB
+    if (digits.length >= 10 && localFiltered.length === 0) {
+      setDbSearching(true);
+      try {
+        const res = await api.post('/groups/contacts/check', [digits.slice(-10)]);
+        const dbMatches = (res.data || []).filter(
+          u => u.id !== userInfo.id && !members.find(m => m.id === u.id)
+        );
+        setDbSearchResults(dbMatches);
+      } catch (e) {
+        setDbSearchResults([]);
+      } finally {
+        setDbSearching(false);
+      }
+    } else {
+      setDbSearchResults([]);
     }
   };
 
   const handleAddMember = async (user) => {
     try {
       await api.post(`/groups/${group.id}/add-member?adminId=${userInfo.id}&userId=${user.id}`);
-      Alert.alert('Added', `${user.fullName || user.username} has been added to the group.`);
-      setContactMatches(prev => prev.filter(m => m.id !== user.id));
-      setPhoneResults([]);
-      setPhoneSearch('');
+      Alert.alert('Added', `${user.contactName || user.fullName || user.username} has been added to the group.`);
+      // Remove from lists and refresh
+      setContactMedscanUsers(prev => prev.filter(m => m.id !== user.id));
+      setFilteredUsers(prev => prev.filter(m => m.id !== user.id));
+      setDbSearchResults(prev => prev.filter(m => m.id !== user.id));
       fetchData();
     } catch (e) {
       const msg = e.response?.data?.message || e.response?.data || 'Failed to add member.';
@@ -267,24 +340,63 @@ const GroupDetailsScreen = ({ route, navigation }) => {
     ]);
   };
 
-  // — Share my schedules with the group —
+  // — Open share picker modal —
   const handleShareSchedules = async () => {
     try {
-      // Fetch user's current schedules to get their IDs
       const schedRes = await api.get(`/schedules/user/${userInfo.id}`);
-      const scheduleIds = (schedRes.data || []).map(s => s.id);
-      if (scheduleIds.length === 0) {
+      const allSchedules = schedRes.data || [];
+      if (allSchedules.length === 0) {
         Alert.alert('No Schedules', 'You have no medication schedules to share.');
         return;
       }
+
+      // Mark which are already shared
+      const alreadySharedIds = new Set(
+        sharedSchedules
+          .filter(ss => (ss.sharedByUser?.id || ss.sharedByUserId) === userInfo.id)
+          .map(ss => ss.schedule?.id || ss.scheduleId)
+      );
+
+      const schedulesWithStatus = allSchedules.map(s => ({
+        ...s,
+        alreadyShared: alreadySharedIds.has(s.id),
+      }));
+
+      setUserSchedules(schedulesWithStatus);
+      setSelectedShareIds(new Set()); // start with none selected
+      setShareModalVisible(true);
+    } catch (e) {
+      Alert.alert('Error', 'Failed to load your schedules.');
+    }
+  };
+
+  const toggleShareSelection = (scheduleId) => {
+    setSelectedShareIds(prev => {
+      const next = new Set(prev);
+      if (next.has(scheduleId)) next.delete(scheduleId);
+      else next.add(scheduleId);
+      return next;
+    });
+  };
+
+  const confirmShareSelected = async () => {
+    if (selectedShareIds.size === 0) {
+      Alert.alert('Nothing Selected', 'Please select at least one schedule to share.');
+      return;
+    }
+    setShareLoading(true);
+    try {
       await api.post(`/groups/${group.id}/share-schedules`, {
         userId: userInfo.id,
-        scheduleIds: scheduleIds,
+        scheduleIds: Array.from(selectedShareIds),
       });
-      Alert.alert('Shared', 'Your medication schedules have been shared with the group.');
+      Alert.alert('Shared', `${selectedShareIds.size} schedule(s) shared with the group.`);
+      setShareModalVisible(false);
       fetchData();
-    } catch (e) {
-      Alert.alert('Error', e.response?.data?.message || e.response?.data?.error || 'Failed to share schedules.');
+    } catch (err) {
+      Alert.alert('Error', err.response?.data?.message || err.response?.data?.error || 'Failed to share schedules.');
+    } finally {
+      setShareLoading(false);
     }
   };
 
@@ -315,7 +427,7 @@ const GroupDetailsScreen = ({ route, navigation }) => {
             <Text style={styles.headerDesc}>{groupDescription}</Text>
           ) : null}
           <Text style={styles.headerMeta}>
-            {members.length} member{members.length !== 1 ? 's' : ''} · Admin: {group?.admin?.fullName || group?.admin?.username || 'You'}
+            {members.length + 1} member{members.length !== 0 ? 's' : ''} · Admin: {group?.admin?.fullName || group?.admin?.username || 'You'}
           </Text>
         </View>
       </View>
@@ -328,17 +440,6 @@ const GroupDetailsScreen = ({ route, navigation }) => {
             <Text style={[styles.editBtnText, { color: '#dc2626' }]}>🗑️ Delete</Text>
           </TouchableOpacity>
         </View>
-      )}
-      {!isAdmin && (
-        <TouchableOpacity style={[styles.editBtn, { marginTop: 12, backgroundColor: '#fef2f2', borderColor: '#fecaca' }]} onPress={handleLeaveGroup}>
-          <Text style={[styles.editBtnText, { color: '#dc2626' }]}>🚪 Leave Group</Text>
-        </TouchableOpacity>
-      )}
-      {isAdmin && (
-        <TouchableOpacity style={[styles.settingRow, { marginTop: 10 }]} onPress={handleToggleTriggers}>
-          <Text style={{ fontSize: 13, color: '#34495e', flex: 1 }}>Allow members to send reminders</Text>
-          <Text style={{ fontSize: 13, color: allowTriggers ? '#27ae60' : '#95a5a6', fontWeight: '700' }}>{allowTriggers ? 'ON' : 'OFF'}</Text>
-        </TouchableOpacity>
       )}
     </View>
   );
@@ -357,42 +458,45 @@ const GroupDetailsScreen = ({ route, navigation }) => {
     </View>
   );
 
-  const renderMemberItem = ({ item }) => (
-    <View style={styles.memberCard}>
-      <View style={styles.memberAvatar}>
-        <Text style={styles.memberAvatarText}>{(item.fullName || item.username || '?')[0].toUpperCase()}</Text>
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.memberName}>
-          {item.fullName || item.username}
-          {item.id === group?.admin?.id && <Text style={styles.adminBadge}> (Admin)</Text>}
-          {item.id === userInfo?.id && <Text style={styles.youBadge}> (You)</Text>}
-        </Text>
-        <Text style={styles.memberPhone}>{item.phoneNumber || '—'}</Text>
-      </View>
-      {isAdmin && item.id !== userInfo?.id && (
-        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-          <TouchableOpacity style={styles.memberActionBtn} onPress={() => handleAddMedicineForMember(item)}>
-            <Text style={{ fontSize: 11, color: '#3498db', fontWeight: '600' }}>📋 Add Med</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.memberActionBtn, { borderColor: '#e74c3c' }]} onPress={() => handleRemoveMember(item.id, item.fullName || item.username)}>
-            <Text style={{ fontSize: 11, color: '#e74c3c', fontWeight: '600' }}>✗</Text>
-          </TouchableOpacity>
+  const renderMemberItem = ({ item }) => {
+    // A4: Resolve contact name from device contacts
+    const phone10 = (item.phoneNumber || '').replace(/[\s\-\(\)\+]/g, '').slice(-10);
+    const contactInfo = contactNameMap[phone10];
+    const primaryName = contactInfo?.contactName || item.fullName || item.username;
+    const aliasName = contactInfo?.contactName ? (item.username || item.fullName) : null;
+    const isSelf = item.id === userInfo?.id;
+    const isGroupAdmin = item.id === group?.admin?.id;
+
+    return (
+      <TouchableOpacity
+        style={styles.memberCard}
+        activeOpacity={0.65}
+        onPress={() => {
+          if (!isSelf) {
+            navigation.navigate('MemberActivity', { member: item, group });
+          }
+        }}
+      >
+        <View style={[styles.memberAvatar, isGroupAdmin && { backgroundColor: '#f39c12' }]}>
+          <Text style={styles.memberAvatarText}>{(primaryName || '?')[0].toUpperCase()}</Text>
         </View>
-      )}
-      {/* Non-admin can send reminders when allowTriggers is ON */}
-      {!isAdmin && allowTriggers && item.id !== userInfo?.id && (
-        <TouchableOpacity style={[styles.memberActionBtn, { borderColor: '#f39c12' }]} onPress={() => {
-          Alert.alert('Send Reminder', `Send a medication reminder to ${item.fullName || item.username}?`, [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Send', onPress: () => handleTriggerReminder(item.id, null) }
-          ]);
-        }}>
-          <Text style={{ fontSize: 11, color: '#f39c12', fontWeight: '600' }}>🔔 Remind</Text>
-        </TouchableOpacity>
-      )}
-    </View>
-  );
+        <View style={{ flex: 1 }}>
+          <Text style={styles.memberName}>
+            {primaryName}
+            {isGroupAdmin && <Text style={styles.adminBadge}> (Admin)</Text>}
+            {isSelf && <Text style={styles.youBadge}> (You)</Text>}
+          </Text>
+          {aliasName && aliasName !== primaryName && (
+            <Text style={styles.memberAlias}>~{aliasName}</Text>
+          )}
+          <Text style={styles.memberPhone}>{item.phoneNumber || '—'}</Text>
+        </View>
+        {!isSelf && (
+          <Text style={{ fontSize: 16, color: '#bdc3c7' }}>›</Text>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   const renderActivityItem = ({ item }) => (
     <View style={styles.activityCard}>
@@ -405,27 +509,32 @@ const GroupDetailsScreen = ({ route, navigation }) => {
   );
 
   const renderScheduleItem = ({ item }) => {
-    const schedule = item.schedule || item;
-    const med = schedule?.medicine;
-    const sharedBy = item.sharedByUser;
+    // A3: Backend returns flat map: { medicineName, doseAmount, doseUnit, sharedByName, scheduleId, ... }
+    const medName = item.medicineName || item.schedule?.medicine?.name || 'Unknown Medicine';
+    const dose = item.doseAmount || item.schedule?.doseAmount || '—';
+    const unit = item.doseUnit || item.schedule?.doseUnit || '';
+    const sharedByName = item.sharedByName || item.sharedByUser?.fullName || item.sharedByUser?.username;
+    const scheduleId = item.scheduleId || item.schedule?.id;
+    const sharedByUserId = item.sharedByUserId;
+    const times = item.scheduleTimes || item.schedule?.scheduleTimes || [];
     return (
       <View style={styles.scheduleCard}>
         <View style={styles.scheduleHeader}>
-          <Text style={styles.scheduleName}>{med?.name || 'Unknown Medicine'}</Text>
-          <Text style={styles.scheduleDose}>{schedule?.doseAmount || '—'} {schedule?.doseUnit || ''}</Text>
+          <Text style={styles.scheduleName}>{medName}</Text>
+          <Text style={styles.scheduleDose}>{dose} {unit}</Text>
         </View>
-        {sharedBy && <Text style={styles.scheduleSharedBy}>Shared by {sharedBy.fullName || sharedBy.username}</Text>}
+        {sharedByName && <Text style={styles.scheduleSharedBy}>Shared by {sharedByName}</Text>}
         <View style={styles.scheduleTimes}>
-          {(schedule?.scheduleTimes || []).map((t, idx) => (
+          {times.map((t, idx) => (
             <Text key={idx} style={styles.scheduleTimeChip}>
               ⏰ {t.scheduledTime ? t.scheduledTime.substring(0, 5) : '—'}
             </Text>
           ))}
         </View>
-        {(isAdmin || allowTriggers) && sharedBy && (
+        {(isAdmin || allowTriggers) && sharedByUserId && (
           <TouchableOpacity
             style={styles.reminderBtn}
-            onPress={() => handleTriggerReminder(sharedBy.id || item.sharedByUserId, schedule.id)}
+            onPress={() => handleTriggerReminder(sharedByUserId, scheduleId)}
           >
             <Text style={styles.reminderBtnText}>🔔 Send Reminder</Text>
           </TouchableOpacity>
@@ -442,7 +551,7 @@ const GroupDetailsScreen = ({ route, navigation }) => {
         return (
           <>
             {isAdmin && (
-              <TouchableOpacity style={styles.addMemberBtn} onPress={() => { setAddMemberVisible(true); setContactMatches([]); setPhoneSearch(''); setPhoneResults([]); }}>
+              <TouchableOpacity style={styles.addMemberBtn} onPress={handleOpenAddMember}>
                 <Text style={styles.addMemberBtnText}>+ Add Member</Text>
               </TouchableOpacity>
             )}
@@ -497,13 +606,141 @@ const GroupDetailsScreen = ({ route, navigation }) => {
     <View style={styles.container}>
       <ScrollView
         contentContainerStyle={{ paddingBottom: 100 }}
-        refreshing={refreshing}
-        onRefresh={onRefresh}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
       >
+        {/* Group Header */}
         {renderHeader()}
-        {renderTabs()}
-        {renderTabContent()}
+
+        {/* ── Reminder Section ── */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionLabel}>NOTIFICATIONS</Text>
+          
+          {/* Global Remind Button — admin always sees it, non-admin sees it faded/disabled when triggers are OFF */}
+          <TouchableOpacity
+            style={[
+              styles.globalRemindBtn,
+              !(isAdmin || allowTriggers) && { opacity: 0.4 },
+            ]}
+            onPress={() => {
+              if (!(isAdmin || allowTriggers)) {
+                Alert.alert('Disabled', 'The group admin has not enabled reminders for members.');
+                return;
+              }
+              Alert.alert(
+                '🔔 Send Reminder',
+                'This will send a notification to all group members who haven\'t updated their shared medicines today.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Send to All Pending',
+                    onPress: async () => {
+                      try {
+                        // Send reminder to each member (except self)
+                        const targets = members.filter(m => m.id !== userInfo.id);
+                        for (const m of targets) {
+                          await api.post(`/groups/${group.id}/trigger-reminder`, {
+                            triggerUserId: userInfo.id,
+                            targetUserId: m.id,
+                            scheduleId: null,
+                          });
+                        }
+                        Alert.alert('Sent', `Reminders sent to ${targets.length} member(s).`);
+                      } catch (e) {
+                        Alert.alert('Error', 'Failed to send reminders.');
+                      }
+                    },
+                  },
+                ]
+              );
+            }}
+          >
+            <Text style={styles.globalRemindBtnText}>🔔 Send Reminder to Pending Members</Text>
+            <Text style={styles.globalRemindDesc}>Notify members who haven't updated their shared medicines</Text>
+          </TouchableOpacity>
+
+          {/* Trigger Toggle — admin only */}
+          {isAdmin && (
+            <TouchableOpacity style={styles.triggerToggleRow} onPress={handleToggleTriggers}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.triggerTitle}>Member Reminders</Text>
+                <Text style={styles.triggerDesc}>
+                  {allowTriggers
+                    ? 'All members can send medication reminders to other members in this group.'
+                    : 'Only the admin can send reminders. Enable this to let all members send reminders.'}
+                </Text>
+              </View>
+              <View style={[styles.toggleTrack, allowTriggers && styles.toggleTrackActive]}>
+                <View style={[styles.toggleThumb, allowTriggers && styles.toggleThumbActive]} />
+              </View>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* ── Members Section ── */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionLabel}>MEMBERS · {members.length + 1}</Text>
+          {isAdmin && (
+            <TouchableOpacity style={styles.addMemberBtn} onPress={handleOpenAddMember}>
+              <Text style={styles.addMemberBtnText}>➕ Add Member</Text>
+            </TouchableOpacity>
+          )}
+          {/* Admin as first entry */}
+          {group?.admin && (
+            <View style={styles.memberCard}>
+              <View style={[styles.memberAvatar, { backgroundColor: '#f39c12' }]}>
+                <Text style={styles.memberAvatarText}>{(group.admin.fullName || group.admin.username || '?')[0].toUpperCase()}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.memberName}>
+                  {group.admin.fullName || group.admin.username}
+                  <Text style={styles.adminBadge}> (Admin)</Text>
+                  {group.admin.id === userInfo?.id && <Text style={styles.youBadge}> (You)</Text>}
+                </Text>
+                <Text style={styles.memberPhone}>{group.admin.phoneNumber || '—'}</Text>
+              </View>
+            </View>
+          )}
+          <FlatList
+            data={members}
+            renderItem={renderMemberItem}
+            keyExtractor={item => String(item.id)}
+            scrollEnabled={false}
+            ListEmptyComponent={<Text style={styles.emptyText}>No other members</Text>}
+          />
+        </View>
+
+        {/* ── Shared Schedules Section ── */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionLabel}>SHARED SCHEDULES</Text>
+          <TouchableOpacity style={styles.addMemberBtn} onPress={handleShareSchedules}>
+            <Text style={styles.addMemberBtnText}>📊 Share My Schedules</Text>
+          </TouchableOpacity>
+          <FlatList
+            data={sharedSchedules}
+            renderItem={renderScheduleItem}
+            keyExtractor={(item, idx) => String(item.id || idx)}
+            scrollEnabled={false}
+            ListEmptyComponent={
+              <View style={{ alignItems: 'center', paddingVertical: 20 }}>
+                <Text style={{ fontSize: 28, marginBottom: 6 }}>📋</Text>
+                <Text style={styles.emptyText}>No shared schedules</Text>
+                <Text style={{ fontSize: 12, color: '#95a5a6', marginTop: 4, textAlign: 'center' }}>
+                  Tap "Share My Schedules" to let group members see your medications
+                </Text>
+              </View>
+            }
+          />
+        </View>
+
+        {/* ── Leave / Exit ── */}
+        {!isAdmin && (
+          <View style={[styles.sectionCard, { marginBottom: 20 }]}>
+            <TouchableOpacity style={styles.leaveBtn} onPress={handleLeaveGroup}>
+              <Text style={styles.leaveBtnText}>🚪 Leave Group</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
 
       {/* Edit Group Modal */}
@@ -530,56 +767,153 @@ const GroupDetailsScreen = ({ route, navigation }) => {
         </View>
       </Modal>
 
-      {/* Add Member Modal */}
+      {/* Add Member Modal — WhatsApp Style */}
       <Modal visible={addMemberVisible} animationType="slide" transparent onRequestClose={() => setAddMemberVisible(false)}>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxHeight: '80%' }]}>
+          <View style={[styles.modalContent, { maxHeight: '85%' }]}>
             <Text style={styles.modalTitle}>Add Member</Text>
 
-            {/* From Contacts */}
-            <TouchableOpacity style={styles.contactsBtn} onPress={handleFromContacts} disabled={contactLoading}>
-              {contactLoading ? <ActivityIndicator size="small" color="#3498db" /> : <Text style={styles.contactsBtnText}>📱 From Contacts</Text>}
-            </TouchableOpacity>
+            {/* Integrated search bar */}
+            <TextInput
+              style={styles.modalInput}
+              value={addMemberSearch}
+              onChangeText={handleMemberSearch}
+              placeholder="Search by name or phone number"
+              placeholderTextColor="#bdc3c7"
+              autoFocus
+            />
 
-            {contactMatches.length > 0 && (
-              <View style={styles.contactMatchesSection}>
-                <Text style={styles.contactMatchesTitle}>Found on MedScan ({contactMatches.length})</Text>
-                <ScrollView style={{ maxHeight: 160 }} nestedScrollEnabled>
-                  {contactMatches.map(user => (
-                    <TouchableOpacity key={user.id} style={styles.matchItem} onPress={() => handleAddMember(user)}>
-                      <View style={styles.memberAvatar}>
-                        <Text style={styles.memberAvatarText}>{(user.fullName || '?')[0].toUpperCase()}</Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.memberName}>{user.fullName || user.username}</Text>
-                        <Text style={styles.memberPhone}>{user.phoneNumber || '—'}</Text>
-                      </View>
-                      <Text style={{ color: '#3498db', fontSize: 18, fontWeight: '700' }}>+</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
+            {contactLoading ? (
+              <View style={{ alignItems: 'center', paddingVertical: 30 }}>
+                <ActivityIndicator size="large" color="#3498db" />
+                <Text style={{ color: '#95a5a6', marginTop: 8, fontSize: 13 }}>Loading contacts...</Text>
               </View>
-            )}
+            ) : (
+              <ScrollView style={{ maxHeight: 380 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                {/* Contacts who are on MedScan */}
+                {filteredUsers.length > 0 && (
+                  <View>
+                    <Text style={styles.contactMatchesTitle}>Contacts on MedScan ({filteredUsers.length})</Text>
+                    {filteredUsers.map(user => (
+                      <TouchableOpacity key={user.id} style={styles.matchItem} onPress={() => handleAddMember(user)}>
+                        <View style={styles.memberAvatar}>
+                          <Text style={styles.memberAvatarText}>{(user.contactName || user.fullName || '?')[0].toUpperCase()}</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.memberName}>{user.contactName || user.fullName || user.username}</Text>
+                          {user.contactName && user.username && (
+                            <Text style={styles.memberAlias}>~{user.username}</Text>
+                          )}
+                          <Text style={styles.memberPhone}>{user.displayPhone || user.phoneNumber}</Text>
+                        </View>
+                        <Text style={{ color: '#27ae60', fontSize: 22, fontWeight: '700' }}>+</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
 
-            {/* Manual phone search */}
-            <Text style={[styles.modalLabel, { marginTop: 12 }]}>Or search by phone</Text>
-            <TextInput style={styles.modalInput} value={phoneSearch} onChangeText={handlePhoneSearch} placeholder="Phone number" placeholderTextColor="#bdc3c7" keyboardType="phone-pad" />
-            {phoneSearching && <ActivityIndicator size="small" color="#3498db" style={{ marginVertical: 6 }} />}
-            {phoneResults.map(user => (
-              <TouchableOpacity key={user.id} style={styles.matchItem} onPress={() => handleAddMember(user)}>
-                <View style={styles.memberAvatar}>
-                  <Text style={styles.memberAvatarText}>{(user.fullName || '?')[0].toUpperCase()}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.memberName}>{user.fullName || user.username}</Text>
-                </View>
-                <Text style={{ color: '#3498db', fontSize: 18, fontWeight: '700' }}>+</Text>
-              </TouchableOpacity>
-            ))}
+                {/* DB search results (non-contact users) */}
+                {dbSearching && <ActivityIndicator size="small" color="#3498db" style={{ marginVertical: 10 }} />}
+                {dbSearchResults.length > 0 && (
+                  <View style={{ marginTop: 8 }}>
+                    <Text style={[styles.contactMatchesTitle, { color: '#7f8c8d' }]}>Not in your contacts</Text>
+                    {dbSearchResults.map(user => (
+                      <TouchableOpacity key={user.id} style={styles.matchItem} onPress={() => handleAddMember(user)}>
+                        <View style={[styles.memberAvatar, { backgroundColor: '#95a5a6' }]}>
+                          <Text style={styles.memberAvatarText}>{(user.fullName || user.username || '?')[0].toUpperCase()}</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.memberName}>{user.fullName || user.username}</Text>
+                          <Text style={styles.memberPhone}>{user.phoneNumber}</Text>
+                        </View>
+                        <Text style={{ color: '#27ae60', fontSize: 22, fontWeight: '700' }}>+</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+
+                {/* Empty states */}
+                {filteredUsers.length === 0 && dbSearchResults.length === 0 && !dbSearching && !contactLoading && (
+                  <View style={{ alignItems: 'center', paddingVertical: 24 }}>
+                    <Text style={{ fontSize: 32, marginBottom: 8 }}>👤</Text>
+                    {addMemberSearch.trim() ? (
+                      <>
+                        <Text style={styles.emptyText}>No users found</Text>
+                        <Text style={{ fontSize: 12, color: '#95a5a6', marginTop: 4, textAlign: 'center' }}>
+                          {addMemberSearch.replace(/\D/g, '').length < 10
+                            ? 'Enter a full 10-digit phone number to search our database'
+                            : 'This number is not registered on MedScan'}
+                        </Text>
+                      </>
+                    ) : (
+                      <>
+                        <Text style={styles.emptyText}>No contacts on MedScan</Text>
+                        <Text style={{ fontSize: 12, color: '#95a5a6', marginTop: 4, textAlign: 'center' }}>
+                          Type a phone number to search
+                        </Text>
+                      </>
+                    )}
+                  </View>
+                )}
+              </ScrollView>
+            )}
 
             <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#e0e0e0', marginTop: 16 }]} onPress={() => setAddMemberVisible(false)}>
               <Text style={{ fontWeight: '600', color: '#7f8c8d' }}>Close</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Share Schedules Picker Modal */}
+      <Modal visible={shareModalVisible} animationType="slide" transparent onRequestClose={() => setShareModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '80%' }]}>
+            <Text style={styles.modalTitle}>Select Schedules to Share</Text>
+            <Text style={{ fontSize: 12, color: '#95a5a6', marginBottom: 12 }}>Choose which medicines to share with this group</Text>
+
+            <ScrollView style={{ maxHeight: 320 }} nestedScrollEnabled>
+              {userSchedules.map(sched => {
+                const isSelected = selectedShareIds.has(sched.id);
+                const isShared = sched.alreadyShared;
+                return (
+                  <TouchableOpacity
+                    key={sched.id}
+                    style={[styles.sharePickerItem, isShared && { opacity: 0.5 }]}
+                    onPress={() => !isShared && toggleShareSelection(sched.id)}
+                    disabled={isShared}
+                  >
+                    <View style={[styles.shareCheckbox, isSelected && styles.shareCheckboxActive]}>
+                      {(isSelected || isShared) && <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>✓</Text>}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.shareItemName}>{sched.medicine?.name || 'Unknown Medicine'}</Text>
+                      <Text style={styles.shareItemDetail}>
+                        {sched.doseAmount || '1'} {sched.doseUnit || 'Dose'} · {sched.frequencyType || 'Daily'}
+                        {isShared ? '  ✓ Already shared' : ''}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#e0e0e0', flex: 1 }]} onPress={() => setShareModalVisible(false)}>
+                <Text style={{ fontWeight: '600', color: '#7f8c8d' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: '#27ae60', flex: 1 }]}
+                onPress={confirmShareSelected}
+                disabled={shareLoading || selectedShareIds.size === 0}
+              >
+                {shareLoading ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={{ fontWeight: '700', color: '#fff' }}>Share ({selectedShareIds.size})</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -632,6 +966,7 @@ const styles = StyleSheet.create({
   adminBadge: { fontWeight: '400', color: '#27ae60', fontSize: 12 },
   youBadge: { fontWeight: '400', color: '#3498db', fontSize: 12 },
   memberPhone: { fontSize: 12, color: '#95a5a6', marginTop: 2 },
+  memberAlias: { fontSize: 11, color: '#bdc3c7', fontStyle: 'italic', marginTop: 1 },
   memberActionBtn: {
     paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8,
     borderWidth: 1, borderColor: '#3498db',
@@ -713,6 +1048,67 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', paddingVertical: 8,
     borderBottomWidth: 1, borderBottomColor: '#f0f0f0',
   },
+
+  // Share picker
+  sharePickerItem: {
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: '#f0f0f0',
+  },
+  shareCheckbox: {
+    width: 24, height: 24, borderRadius: 6, borderWidth: 2,
+    borderColor: '#d1d5db', alignItems: 'center', justifyContent: 'center',
+    marginRight: 12,
+  },
+  shareCheckboxActive: {
+    backgroundColor: '#27ae60', borderColor: '#27ae60',
+  },
+  shareItemName: { fontSize: 15, fontWeight: '600', color: '#2c3e50' },
+  shareItemDetail: { fontSize: 12, color: '#95a5a6', marginTop: 2 },
+
+  // Section cards
+  sectionCard: {
+    backgroundColor: '#fff', marginHorizontal: 16, marginTop: 12,
+    borderRadius: 14, padding: 16,
+    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06, shadowRadius: 4,
+  },
+  sectionLabel: {
+    fontSize: 12, fontWeight: '700', color: '#95a5a6', letterSpacing: 0.8,
+    marginBottom: 12,
+  },
+
+  // Global remind button
+  globalRemindBtn: {
+    backgroundColor: '#e8faf0', borderRadius: 12, padding: 14,
+    borderWidth: 1.5, borderColor: '#a7f3d0', marginBottom: 12, alignItems: 'center',
+  },
+  globalRemindBtnText: { fontSize: 14, fontWeight: '700', color: '#059669' },
+  globalRemindDesc: { fontSize: 11, color: '#6ee7b7', marginTop: 4, textAlign: 'center' },
+
+  // Trigger toggle
+  triggerToggleRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 10, paddingHorizontal: 4,
+  },
+  triggerTitle: { fontSize: 14, fontWeight: '600', color: '#2c3e50', marginBottom: 2 },
+  triggerDesc: { fontSize: 12, color: '#95a5a6', lineHeight: 17 },
+  toggleTrack: {
+    width: 46, height: 26, borderRadius: 13, backgroundColor: '#d1d5db',
+    justifyContent: 'center', paddingHorizontal: 3,
+  },
+  toggleTrackActive: { backgroundColor: '#34d399' },
+  toggleThumb: {
+    width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff',
+    elevation: 2,
+  },
+  toggleThumbActive: { alignSelf: 'flex-end' },
+
+  // Leave button
+  leaveBtn: {
+    backgroundColor: '#fef2f2', paddingVertical: 14, borderRadius: 10,
+    alignItems: 'center', borderWidth: 1, borderColor: '#fecaca',
+  },
+  leaveBtnText: { fontSize: 15, fontWeight: '700', color: '#dc2626' },
 });
 
 export default GroupDetailsScreen;

@@ -198,6 +198,40 @@ public class AdherenceService {
         return schedule.getCurrentStock() <= threshold;
     }
 
+    /**
+     * Undo today's adherence log for a schedule.
+     * Restores stock if the undone log was TAKEN.
+     */
+    @Transactional
+    public boolean undoTodayLog(Long userId, Long scheduleId) {
+        LocalDateTime todayStart = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime todayEnd = todayStart.plusDays(1);
+        
+        Optional<AdherenceLog> logOpt = adherenceRepository
+                .findFirstByScheduleIdAndTimestampBetween(scheduleId, todayStart, todayEnd);
+        
+        if (logOpt.isEmpty()) return false;
+        
+        AdherenceLog log = logOpt.get();
+        
+        // Restore stock if it was TAKEN
+        if ("TAKEN".equalsIgnoreCase(log.getStatus())) {
+            Optional<MedicationSchedule> schedOpt = scheduleRepository.findById(scheduleId);
+            if (schedOpt.isPresent()) {
+                MedicationSchedule schedule = schedOpt.get();
+                if (schedule.getCurrentStock() != null) {
+                    int amountToRestore = schedule.getDoseAmount() != null
+                            ? (int) Math.ceil(schedule.getDoseAmount()) : 1;
+                    schedule.setCurrentStock(schedule.getCurrentStock() + amountToRestore);
+                    scheduleRepository.save(schedule);
+                }
+            }
+        }
+        
+        adherenceRepository.delete(log);
+        return true;
+    }
+
     public List<AdherenceLog> getUserHistory(Long userId) {
         return adherenceRepository.findByUserId(userId);
     }

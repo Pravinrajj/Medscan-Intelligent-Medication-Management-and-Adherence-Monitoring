@@ -115,7 +115,7 @@ export async function registerForPushNotificationsAsync(userId) {
 
   try {
     const token = (await Notifications.getExpoPushTokenAsync({
-      projectId: 'medscan-20d95', // Must match your Firebase project ID
+      projectId: '567e7bb9-3f2a-4b8a-b9a1-777eac1ae7ff',
     })).data;
     console.log('[Notifications] Push token:', token);
 

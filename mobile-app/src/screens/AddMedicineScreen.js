@@ -1,5 +1,5 @@
 import React, { useState, useContext, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, ActivityIndicator, Modal, FlatList } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, ActivityIndicator, Modal, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
 import api from '../api/client';
 import { AuthContext } from '../context/AuthContext';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -39,6 +39,8 @@ const AddMedicineScreen = ({ navigation, route }) => {
   const [customDays, setCustomDays] = useState([]);
   const [times, setTimes] = useState([new Date()]);
   const [currentStock, setCurrentStock] = useState('');
+  const [bundleName, setBundleName] = useState('');
+  const [existingBundles, setExistingBundles] = useState([]); // existing bundle names for autocomplete
   const [saving, setSaving] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
   const [currentPickerIndex, setCurrentPickerIndex] = useState(0);
@@ -54,6 +56,23 @@ const AddMedicineScreen = ({ navigation, route }) => {
 
   // Flag to prevent re-search after selecting a suggestion
   const skipSearchRef = useRef(false);
+
+  // Load existing bundle names on mount
+  useEffect(() => {
+    const loadBundles = async () => {
+      try {
+        const res = await api.get(`/schedules/user/${targetUserId}`);
+        const names = [...new Set((res.data || [])
+          .map(s => s.bundleName)
+          .filter(Boolean)
+        )];
+        setExistingBundles(names);
+      } catch (e) {
+        // silently fail — not critical
+      }
+    };
+    if (targetUserId) loadBundles();
+  }, [targetUserId]);
 
   const handleTypeChange = (newType) => {
     setType(newType);
@@ -222,6 +241,11 @@ const AddMedicineScreen = ({ navigation, route }) => {
         schedulePayload.customDays = customDays.join(',');
       }
 
+      // Optional bundle
+      if (bundleName.trim()) {
+        schedulePayload.bundleName = bundleName.trim();
+      }
+
       await api.post(`/schedules/user/${targetUserId}/medicine/${medicineId}`, schedulePayload);
       
       const msg = targetUserName
@@ -240,7 +264,7 @@ const AddMedicineScreen = ({ navigation, route }) => {
   const isAsNeeded = frequencyType === 'AS_NEEDED';
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         
         {/* Admin creating for member banner */}
@@ -439,6 +463,45 @@ const AddMedicineScreen = ({ navigation, route }) => {
           placeholderTextColor="#bdc3c7"
         />
 
+        {/* Bundle Name — optional grouping */}
+        <Text style={styles.label}>Medicine Group (optional)</Text>
+        <TextInput
+          style={styles.input}
+          value={bundleName}
+          onChangeText={setBundleName}
+          placeholder="e.g., Morning Meds, Heart Pills"
+          placeholderTextColor="#bdc3c7"
+          autoCapitalize="words"
+        />
+        {/* Bundle suggestions — show existing bundles as tappable chips */}
+        {(() => {
+          const filtered = bundleName.trim()
+            ? existingBundles.filter(b => b.toLowerCase().includes(bundleName.toLowerCase()) && b !== bundleName)
+            : existingBundles;
+          if (filtered.length > 0) {
+            return (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: -4, marginBottom: 12 }}>
+                {filtered.map(b => (
+                  <TouchableOpacity
+                    key={b}
+                    style={{ backgroundColor: '#eef2ff', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: '#c7d2fe' }}
+                    onPress={() => setBundleName(b)}
+                  >
+                    <Text style={{ fontSize: 12, color: '#4f46e5', fontWeight: '600' }}>📦 {b}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            );
+          }
+          return (
+            <Text style={{ fontSize: 12, color: '#7f8383', marginLeft: 5, marginBottom: 12 }}>
+              {existingBundles.length === 0
+                ? '*Group medicines together under one label on your dashboard'
+                : 'Or type a new bundle name to create one'}
+            </Text>
+          );
+        })()}
+
         {/* Save Button */}
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving}>
           {saving ? (
@@ -448,13 +511,13 @@ const AddMedicineScreen = ({ navigation, route }) => {
           )}
         </TouchableOpacity>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f6f9fc' },
-  scrollContent: { padding: 20, paddingBottom: 120 },
+  scrollContent: { padding: 20, paddingBottom: 80 },
   
   adminBanner: {
     backgroundColor: '#e8f4fd', borderRadius: 12, padding: 14,

@@ -8,6 +8,9 @@ import MedicationItem from '../components/MedicationItem';
 import AdherenceChart from '../components/AdherenceChart';
 import offlineSyncService from '../services/OfflineSyncService';
 
+// B1: Track which bundles are collapsed
+let collapsedBundlesState = {};
+
 const formatCacheAge = (isoString) => {
   const diff = Date.now() - new Date(isoString).getTime();
   const mins = Math.floor(diff / 60000);
@@ -204,6 +207,39 @@ const DashboardScreen = ({ navigation }) => {
     }
   };
 
+  const handleUndo = async (scheduleId) => {
+    Alert.alert(
+      "Undo Status",
+      "This will remove today's recorded status for this medicine. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Undo",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await api.delete(`/adherence/undo?userId=${userInfo.id}&scheduleId=${scheduleId}`);
+              setLoggedSchedules(prev => {
+                const next = new Set(prev);
+                next.delete(scheduleId);
+                return next;
+              });
+              setSnoozedSchedules(prev => {
+                const next = new Set(prev);
+                next.delete(scheduleId);
+                return next;
+              });
+              Alert.alert("Undone", "Status has been reset. You can re-record it.");
+              fetchData();
+            } catch (e) {
+              Alert.alert("Error", e.response?.data?.message || "Failed to undo.");
+            }
+          }
+        }
+      ]
+    );
+  };
+
   if (loading) {
      return <View style={styles.centered}><ActivityIndicator size="large" color="#4a90e2" /></View>;
   }
@@ -265,41 +301,7 @@ const DashboardScreen = ({ navigation }) => {
                 ))}
             </View>
         )}
-
-        {/* ===== SCHEDULES FIRST — the primary content ===== */}
-        <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Today's Schedule</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('ScanPrescription')}>
-                <Text style={styles.scanLink}>📷 Scan</Text>
-            </TouchableOpacity>
-        </View>
         
-        {schedules.length === 0 ? (
-           <View style={styles.emptyContainer}>
-               <Text style={styles.emptyIcon}>💊</Text>
-               <Text style={styles.emptyText}>No medications scheduled yet</Text>
-               <Text style={styles.emptySubtext}>Add your first medicine to start tracking</Text>
-               <TouchableOpacity style={styles.addMedBtn} onPress={() => navigation.navigate('AddMedicine')}>
-                   <Text style={styles.addMedText}>+ Add Medication</Text>
-               </TouchableOpacity>
-           </View>
-        ) : (
-            <View style={styles.listContainer}>
-                {schedules.map(item => (
-                    <MedicationItem 
-                      key={item.id} 
-                      schedule={item} 
-                      onTaken={() => handleTakeDose(item.id)} 
-                      onMissed={() => handleMissDose(item.id)}
-                      onSnooze={() => handleSnooze(item.id)}
-                      onPress={() => navigation.navigate('MedicineDetail', { schedule: item })} 
-                      loggedToday={loggedSchedules.has(item.id)}
-                      snoozedToday={snoozedSchedules.has(item.id)}
-                    />
-                ))}
-            </View>
-        )}
-
         {/* ===== STATS & CHART — below schedules ===== */}
         {stats && (
             <View style={styles.statsCompact}>
@@ -328,6 +330,102 @@ const DashboardScreen = ({ navigation }) => {
 
         {/* Weekly Chart */}
         <AdherenceChart dailyBreakdown={stats?.dailyBreakdown} />
+
+        {/* ===== SCHEDULES FIRST — the primary content ===== */}
+        <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Today's Schedule</Text>
+            <TouchableOpacity onPress={() => navigation.navigate('ScanPrescription')}>
+                <Text style={styles.scanLink}>📷 Scan</Text>
+            </TouchableOpacity>
+        </View>
+        
+        {schedules.length === 0 ? (
+           <View style={styles.emptyContainer}>
+               <Text style={styles.emptyIcon}>💊</Text>
+               <Text style={styles.emptyText}>No medications scheduled yet</Text>
+               <Text style={styles.emptySubtext}>Add your first medicine to start tracking</Text>
+               <TouchableOpacity style={styles.addMedBtn} onPress={() => navigation.navigate('AddMedicine')}>
+                   <Text style={styles.addMedText}>+ Add Medication</Text>
+               </TouchableOpacity>
+           </View>
+        ) : (() => {
+            // B3: Group schedules by bundle
+            const bundled = {};
+            const standalone = [];
+            schedules.forEach(item => {
+              if (item.bundleName) {
+                if (!bundled[item.bundleName]) bundled[item.bundleName] = [];
+                bundled[item.bundleName].push(item);
+              } else {
+                standalone.push(item);
+              }
+            });
+            const bundleNames = Object.keys(bundled);
+
+            return (
+            <View style={styles.listContainer}>
+                {/* Bundled medicines */}
+                {bundleNames.map(bName => {
+                  const items = bundled[bName];
+                  const takenCount = items.filter(i => loggedSchedules.has(i.id)).length;
+                  const isCollapsed = collapsedBundlesState[bName];
+                  return (
+                  <View key={bName} style={styles.bundleSection}>
+                    <TouchableOpacity
+                      style={styles.bundleHeader}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        collapsedBundlesState = { ...collapsedBundlesState, [bName]: !isCollapsed };
+                        // Force re-render
+                        setSchedules([...schedules]);
+                      }}
+                    >
+                      <Text style={styles.bundleTitle}>📦 {bName}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text style={[
+                          styles.bundleCount,
+                          takenCount === items.length && { color: '#27ae60' },
+                        ]}>
+                          {takenCount}/{items.length} taken
+                        </Text>
+                        <Text style={{ fontSize: 14, color: '#95a5a6' }}>{isCollapsed ? '▸' : '▾'}</Text>
+                      </View>
+                    </TouchableOpacity>
+                    {!isCollapsed && items.map(item => (
+                      <MedicationItem 
+                        key={item.id} 
+                        schedule={item} 
+                        onTaken={() => handleTakeDose(item.id)} 
+                        onMissed={() => handleMissDose(item.id)}
+                        onSnooze={() => handleSnooze(item.id)}
+                        onUndo={() => handleUndo(item.id)}
+                        onPress={() => navigation.navigate('MedicineDetail', { schedule: item })} 
+                        loggedToday={loggedSchedules.has(item.id)}
+                        snoozedToday={snoozedSchedules.has(item.id)}
+                      />
+                    ))}
+                  </View>
+                  );
+                })}
+
+                {/* Standalone medicines (no bundle) */}
+                {standalone.map(item => (
+                    <MedicationItem 
+                      key={item.id} 
+                      schedule={item} 
+                      onTaken={() => handleTakeDose(item.id)} 
+                      onMissed={() => handleMissDose(item.id)}
+                      onSnooze={() => handleSnooze(item.id)}
+                      onUndo={() => handleUndo(item.id)}
+                      onPress={() => navigation.navigate('MedicineDetail', { schedule: item })} 
+                      loggedToday={loggedSchedules.has(item.id)}
+                      snoozedToday={snoozedSchedules.has(item.id)}
+                    />
+                ))}
+            </View>
+            );
+        })()}
+
 
       </ScrollView>
 
@@ -423,6 +521,36 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.35, shadowRadius: 8,
   },
   fabText: { color: '#fff', fontSize: 28, fontWeight: '600', marginTop: -2 },
+
+  // B3: Bundle grouping
+  bundleSection: {
+    marginBottom: 12,
+    backgroundColor: '#f0f4ff',
+    borderRadius: 14,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+  },
+  bundleHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingBottom: 8,
+    marginBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#dbeafe',
+  },
+  bundleTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#3b82f6',
+  },
+  bundleCount: {
+    fontSize: 11,
+    color: '#93c5fd',
+    fontWeight: '600',
+  },
 });
 
 export default DashboardScreen;

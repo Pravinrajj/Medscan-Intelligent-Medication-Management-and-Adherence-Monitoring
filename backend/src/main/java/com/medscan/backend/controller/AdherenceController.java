@@ -39,6 +39,17 @@ public class AdherenceController {
         return ResponseEntity.ok(adherenceService.getGroupAdherence(groupId));
     }
 
+    @DeleteMapping("/undo")
+    public ResponseEntity<?> undoTodayLog(
+            @RequestParam Long userId,
+            @RequestParam Long scheduleId) {
+        boolean deleted = adherenceService.undoTodayLog(userId, scheduleId);
+        if (deleted) {
+            return ResponseEntity.ok(Map.of("message", "Status undone successfully."));
+        }
+        return ResponseEntity.badRequest().body(Map.of("message", "No log found for today to undo."));
+    }
+
     @Autowired
     private com.medscan.backend.service.ReportService reportService;
 

@@ -58,7 +58,7 @@ const getTimeStatus = (scheduleTimes, frequencyType) => {
   return { isActive: false, statusText: 'All doses done for today', isAsNeeded: false };
 };
 
-const MedicationItem = ({ schedule, onTaken, onMissed, onSnooze, onPress, loggedToday, snoozedToday }) => {
+const MedicationItem = ({ schedule, onTaken, onMissed, onSnooze, onPress, onUndo, loggedToday, snoozedToday }) => {
   const medicine = schedule?.medicine || {};
   const scheduleTimes = schedule?.scheduleTimes || [];
   const frequencyType = schedule?.frequencyType;
@@ -113,9 +113,16 @@ const MedicationItem = ({ schedule, onTaken, onMissed, onSnooze, onPress, logged
 
       {/* Action Buttons — always show for unlogged items */}
       <View style={styles.actions}>
-        {loggedToday ? (
-          <View style={styles.doneIndicator}>
-            <Text style={styles.doneText}>Done ✓</Text>
+        {loggedToday || snoozedToday ? (
+          <View style={styles.doneRow}>
+            <View style={styles.doneIndicator}>
+              <Text style={styles.doneText}>{snoozedToday ? 'Snoozed ⏰' : 'Done ✓'}</Text>
+            </View>
+            {onUndo && (
+              <TouchableOpacity style={styles.undoButton} onPress={onUndo}>
+                <Text style={styles.undoButtonText}>Undo</Text>
+              </TouchableOpacity>
+            )}
           </View>
         ) : timeStatus.isActive ? (
           <>
@@ -277,6 +284,24 @@ const styles = StyleSheet.create({
     color: '#27ae60',
     fontWeight: '700',
     fontSize: 13,
+  },
+  doneRow: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 4,
+  },
+  undoButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  undoButtonText: {
+    color: '#e74c3c',
+    fontWeight: '600',
+    fontSize: 11,
   },
 });
 

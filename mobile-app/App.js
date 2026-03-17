@@ -15,7 +15,9 @@ import DashboardScreen from './src/screens/DashboardScreen';
 import AddMedicineScreen from './src/screens/AddMedicineScreen';
 import GroupScreen from './src/screens/GroupScreen';
 import AddGroupScreen from './src/screens/AddGroupScreen';
+import GroupChatScreen from './src/screens/GroupChatScreen';
 import GroupDetailsScreen from './src/screens/GroupDetailsScreen';
+import MemberActivityScreen from './src/screens/MemberActivityScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import ScanPrescriptionScreen from './src/screens/ScanPrescriptionScreen';
 import MedicineDetailScreen from './src/screens/MedicineDetailScreen';
@@ -48,12 +50,14 @@ const HomeStack = () => (
   </Stack.Navigator>
 );
 
-// Groups Stack
+// Groups Stack — GroupChatScreen is now the landing page when tapping a group
 const GroupsStack = () => (
   <Stack.Navigator>
     <Stack.Screen name="GroupsMain" component={GroupScreen} options={{ title: 'Groups', headerShown: false }} />
     <Stack.Screen name="AddGroup" component={AddGroupScreen} options={{ title: 'Create Group' }} />
-    <Stack.Screen name="GroupDetails" component={GroupDetailsScreen} options={({ route }) => ({ title: route.params?.group?.groupName || route.params?.group?.name || 'Group' })} />
+    <Stack.Screen name="GroupChat" component={GroupChatScreen} options={{ title: '' }} />
+    <Stack.Screen name="GroupDetails" component={GroupDetailsScreen} options={({ route }) => ({ title: route.params?.group?.groupName || route.params?.group?.name || 'Group Info' })} />
+    <Stack.Screen name="MemberActivity" component={MemberActivityScreen} options={({ route }) => ({ title: route.params?.member?.fullName || route.params?.member?.username || 'Member' })} />
     <Stack.Screen name="AddMedicineForMember" component={AddMedicineScreen} options={({ route }) => ({ title: `Add Medicine for ${route.params?.targetUserName || 'Member'}` })} />
   </Stack.Navigator>
 );

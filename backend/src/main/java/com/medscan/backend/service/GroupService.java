@@ -105,7 +105,7 @@ public class GroupService {
             }
         }
         
-        // Enrich each group with member count
+        // Enrich each group with member count and last activity
         List<Map<String, Object>> result = new ArrayList<>();
         for (CareGroup g : allGroups) {
             Map<String, Object> groupMap = new java.util.LinkedHashMap<>();
@@ -118,6 +118,12 @@ public class GroupService {
             // Count members: admin + group_members entries
             int memberCount = 1 + groupMemberRepository.findByGroup(g).size();
             groupMap.put("memberCount", memberCount);
+            // C1: Last activity preview
+            GroupActivity lastActivity = groupActivityRepository.findTop1ByGroupIdOrderByTimestampDesc(g.getId());
+            if (lastActivity != null) {
+                groupMap.put("lastActivityMessage", lastActivity.getMessage());
+                groupMap.put("lastActivityTime", lastActivity.getTimestamp());
+            }
             result.add(groupMap);
         }
         return result;
@@ -294,21 +300,31 @@ public class GroupService {
             throw new RuntimeException("Only the admin can send reminders in this group");
         }
 
-        MedicationSchedule schedule = medicationScheduleRepository.findById(scheduleId)
-                .orElseThrow(() -> new RuntimeException("Schedule not found"));
-
-        String medicineName = schedule.getMedicine() != null ? schedule.getMedicine().getName() : "medication";
         User triggerUser = userRepository.findById(triggerUserId).orElse(null);
         String triggerName = triggerUser != null
                 ? (triggerUser.getFullName() != null ? triggerUser.getFullName() : triggerUser.getUsername())
                 : "Someone";
 
-        pushNotificationService.sendToUser(targetUserId,
-                "💊 Reminder from " + triggerName,
-                "Don't forget to take your " + medicineName + "!");
+        String medicineName;
+        if (scheduleId != null) {
+            MedicationSchedule schedule = medicationScheduleRepository.findById(scheduleId).orElse(null);
+            medicineName = schedule != null && schedule.getMedicine() != null
+                    ? schedule.getMedicine().getName() : "medication";
+        } else {
+            medicineName = null; // General reminder
+        }
 
+        String title = "💊 Reminder from " + triggerName;
+        String body = medicineName != null
+                ? "Don't forget to take your " + medicineName + "!"
+                : "Time to update your medicines!";
+
+        pushNotificationService.sendToUser(targetUserId, title, body);
+
+        String activityMsg = medicineName != null
+                ? triggerName + " sent a reminder for " + medicineName
+                : triggerName + " sent a reminder to update medicines";
         groupActivityRepository.save(new GroupActivity(
-                groupId, triggerUserId, "REMINDER_SENT",
-                triggerName + " sent a reminder for " + medicineName));
+                groupId, triggerUserId, "REMINDER_SENT", activityMsg));
     }
 }

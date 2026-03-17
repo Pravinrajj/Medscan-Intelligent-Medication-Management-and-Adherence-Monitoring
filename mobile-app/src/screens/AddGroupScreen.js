@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, ActivityIndicator } from 'react-native';
 import * as Contacts from 'expo-contacts';
 import api from '../api/client';
@@ -17,6 +17,11 @@ const AddGroupScreen = ({ navigation }) => {
   const [contactMatches, setContactMatches] = useState([]);
   const [showContactMatches, setShowContactMatches] = useState(false);
   const [phoneToContactName, setPhoneToContactName] = useState({});
+
+  // B2: Auto-load contacts on mount
+  useEffect(() => {
+    handleFromContacts();
+  }, []);
 
   const searchByPhone = async (query) => {
     setMemberSearch(query);
@@ -201,31 +206,69 @@ const AddGroupScreen = ({ navigation }) => {
 
         <Text style={styles.sectionTitle}>Add Members</Text>
 
-        {/* From Contacts Button */}
-        <TouchableOpacity style={styles.contactsBtn} onPress={handleFromContacts} disabled={contactLoading}>
-          {contactLoading ? (
-            <ActivityIndicator size="small" color="#3498db" />
-          ) : (
-            <Text style={styles.contactsBtnText}>📱 From Contacts</Text>
-          )}
-        </TouchableOpacity>
+        {/* B2: Single search bar — filters contacts, DB fallback at 10 digits */}
+        <TextInput
+          style={styles.input}
+          value={memberSearch}
+          onChangeText={(text) => {
+            setMemberSearch(text);
+            const digits = text.replace(/\D/g, '');
+            // Filter contacts
+            if (digits.length > 0) {
+              const filtered = contactMatches.filter(u => {
+                const phone = (u.phoneNumber || '').replace(/\D/g, '');
+                const name = (u.displayName || '').toLowerCase();
+                return phone.includes(digits) || name.includes(text.toLowerCase());
+              });
+              setSearchResults(filtered);
+            } else if (text.trim()) {
+              const filtered = contactMatches.filter(u => {
+                const name = (u.displayName || '').toLowerCase();
+                return name.includes(text.toLowerCase());
+              });
+              setSearchResults(filtered);
+            } else {
+              setSearchResults(contactMatches);
+            }
+            // DB fallback at 10 digits
+            if (digits.length >= 10 && contactMatches.filter(u => (u.phoneNumber || '').replace(/\D/g, '').includes(digits)).length === 0) {
+              setSearching(true);
+              api.post('/groups/contacts/check', [digits.slice(-10)])
+                .then(res => {
+                  const dbResults = (res.data || []).filter(
+                    u => u.id !== userInfo.id && !selectedMembers.find(m => m.id === u.id)
+                  );
+                  setSearchResults(prev => {
+                    const ids = new Set(prev.map(p => p.id));
+                    return [...prev, ...dbResults.filter(r => !ids.has(r.id))];
+                  });
+                })
+                .catch(() => {})
+                .finally(() => setSearching(false));
+            }
+          }}
+          placeholder="Search by name or phone number"
+          placeholderTextColor="#bdc3c7"
+        />
 
-        {/* Contact Matches */}
-        {showContactMatches && contactMatches.length > 0 && (
-          <View style={styles.contactMatchesSection}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <Text style={styles.selectedTitle}>Found on MedScan ({contactMatches.length})</Text>
-              <TouchableOpacity onPress={() => setShowContactMatches(false)}>
-                <Text style={{ color: '#95a5a6', fontSize: 12 }}>Hide</Text>
-              </TouchableOpacity>
-            </View>
-            {contactMatches.map(user => (
+        {contactLoading && <ActivityIndicator size="small" color="#3498db" style={{ marginVertical: 8 }} />}
+        {searching && <ActivityIndicator size="small" color="#3498db" style={{ marginVertical: 4 }} />}
+
+        {/* Contact matches / search results */}
+        {(memberSearch.trim() ? searchResults : contactMatches).length > 0 && (
+          <View style={styles.searchResults}>
+            <Text style={styles.selectedTitle}>
+              {memberSearch.trim() ? 'Search Results' : 'Your Contacts on MedScan'} ({(memberSearch.trim() ? searchResults : contactMatches).length})
+            </Text>
+            {(memberSearch.trim() ? searchResults : contactMatches)
+              .filter(u => !selectedMembers.find(m => m.id === u.id))
+              .map(user => (
               <TouchableOpacity key={user.id} style={styles.searchResultItem} onPress={() => addMember(user)}>
                 <View style={styles.userAvatar}>
-                  <Text style={styles.userAvatarText}>{(user.displayName || 'C')[0].toUpperCase()}</Text>
+                  <Text style={styles.userAvatarText}>{(user.displayName || user.fullName || '?')[0].toUpperCase()}</Text>
                 </View>
                 <View style={styles.userInfo}>
-                  <Text style={styles.userName}>{user.displayName || 'Contact'}</Text>
+                  <Text style={styles.userName}>{user.displayName || user.fullName || user.username}</Text>
                   <Text style={styles.userPhone}>{user.phoneNumber || '—'}</Text>
                 </View>
                 <Text style={styles.addIcon}>+</Text>
@@ -234,37 +277,7 @@ const AddGroupScreen = ({ navigation }) => {
           </View>
         )}
 
-        {/* Manual phone search fallback */}
-        <Text style={[styles.label, { marginTop: 12 }]}>Or search by phone number</Text>
-        <TextInput
-          style={styles.input}
-          value={memberSearch}
-          onChangeText={searchByPhone}
-          placeholder="Search by phone number"
-          placeholderTextColor="#bdc3c7"
-          keyboardType="phone-pad"
-        />
-
-        {searching && <ActivityIndicator size="small" color="#3498db" style={{ marginVertical: 8 }} />}
-
-        {searchResults.length > 0 && (
-          <View style={styles.searchResults}>
-            {searchResults.map(user => (
-              <TouchableOpacity key={user.id} style={styles.searchResultItem} onPress={() => addMember(user)}>
-                <View style={styles.userAvatar}>
-                  <Text style={styles.userAvatarText}>R</Text>
-                </View>
-                <View style={styles.userInfo}>
-                  <Text style={styles.userName}>{user.displayName || 'Registered User'}</Text>
-                  <Text style={styles.userPhone}>Match found</Text>
-                </View>
-                <Text style={styles.addIcon}>+</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
-        {memberSearch.replace(/\D/g, '').length >= 3 && !searching && searchResults.length === 0 && (
+        {memberSearch.replace(/\D/g, '').length >= 10 && !searching && searchResults.length === 0 && (
           <Text style={styles.noResults}>No registered user found with that number</Text>
         )}
 

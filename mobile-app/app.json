@@ -22,7 +22,11 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.medscan.app",
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "android.permission.READ_CONTACTS",
+        "android.permission.WRITE_CONTACTS"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -42,6 +46,12 @@
           "contactsPermission": "Allow MedScan to access your contacts to find friends and family on MedScan."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "567e7bb9-3f2a-4b8a-b9a1-777eac1ae7ff"
+      }
+    },
+    "owner": "pravinrajj"
   }
 }

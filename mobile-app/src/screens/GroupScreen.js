@@ -38,23 +38,44 @@ const GroupScreen = ({ navigation }) => {
     }, [userInfo])
   );
 
+  const getRelativeTime = (timestamp) => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    const now = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (date.toDateString() === now.toDateString()) {
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  };
+
   const renderItem = ({ item }) => (
     <TouchableOpacity 
       style={styles.groupCard} 
-      onPress={() => navigation.navigate('GroupDetails', { group: item })}
+      onPress={() => navigation.navigate('GroupChat', { group: item })}
       activeOpacity={0.7}
     >
       <View style={styles.groupIcon}>
         <Text style={styles.groupIconText}>👥</Text>
       </View>
       <View style={styles.groupInfo}>
-        <Text style={styles.groupName}>{item.groupName || item.name}</Text>
-        {item.description ? <Text style={styles.groupDesc}>{item.description}</Text> : null}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={styles.groupName} numberOfLines={1}>{item.groupName || item.name}</Text>
+          {item.lastActivityTime && (
+            <Text style={styles.lastTime}>{getRelativeTime(item.lastActivityTime)}</Text>
+          )}
+        </View>
+        {item.lastActivityMessage ? (
+          <Text style={styles.lastMessage} numberOfLines={1}>{item.lastActivityMessage}</Text>
+        ) : item.description ? (
+          <Text style={styles.groupDesc} numberOfLines={1}>{item.description}</Text>
+        ) : null}
         <Text style={styles.memberCount}>
           {item.memberCount || item.members?.length || 0} members
         </Text>
       </View>
-      <Text style={styles.arrow}>→</Text>
     </TouchableOpacity>
   );
 
@@ -162,7 +183,8 @@ const styles = StyleSheet.create({
   groupName: { fontSize: 16, fontWeight: '700', color: '#2c3e50' },
   groupDesc: { fontSize: 13, color: '#7f8c8d', marginTop: 2 },
   memberCount: { fontSize: 12, color: '#3498db', fontWeight: '600', marginTop: 4 },
-  arrow: { fontSize: 18, color: '#bdc3c7' },
+  lastMessage: { fontSize: 13, color: '#7f8c8d', marginTop: 2 },
+  lastTime: { fontSize: 11, color: '#95a5a6' },
 
   emptyContainer: { alignItems: 'center', paddingTop: 60 },
   emptyIcon: { fontSize: 48, marginBottom: 12 },

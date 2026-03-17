@@ -129,7 +129,7 @@ public class GroupController {
             @RequestBody Map<String, Object> body) {
         Long triggerUserId = Long.valueOf(body.get("triggerUserId").toString());
         Long targetUserId = Long.valueOf(body.get("targetUserId").toString());
-        Long scheduleId = Long.valueOf(body.get("scheduleId").toString());
+        Long scheduleId = body.get("scheduleId") != null ? Long.valueOf(body.get("scheduleId").toString()) : null;
         groupService.triggerReminder(groupId, triggerUserId, targetUserId, scheduleId);
         return ResponseEntity.ok(Map.of("message", "Reminder sent"));
     }
