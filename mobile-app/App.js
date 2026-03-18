@@ -18,6 +18,7 @@ import AddGroupScreen from './src/screens/AddGroupScreen';
 import GroupChatScreen from './src/screens/GroupChatScreen';
 import GroupDetailsScreen from './src/screens/GroupDetailsScreen';
 import MemberActivityScreen from './src/screens/MemberActivityScreen';
+import SharedSchedulesScreen from './src/screens/SharedSchedulesScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import ScanPrescriptionScreen from './src/screens/ScanPrescriptionScreen';
 import MedicineDetailScreen from './src/screens/MedicineDetailScreen';
@@ -58,6 +59,7 @@ const GroupsStack = () => (
     <Stack.Screen name="GroupChat" component={GroupChatScreen} options={{ title: '' }} />
     <Stack.Screen name="GroupDetails" component={GroupDetailsScreen} options={({ route }) => ({ title: route.params?.group?.groupName || route.params?.group?.name || 'Group Info' })} />
     <Stack.Screen name="MemberActivity" component={MemberActivityScreen} options={({ route }) => ({ title: route.params?.member?.fullName || route.params?.member?.username || 'Member' })} />
+    <Stack.Screen name="SharedSchedules" component={SharedSchedulesScreen} options={{ title: 'Shared Schedules' }} />
     <Stack.Screen name="AddMedicineForMember" component={AddMedicineScreen} options={({ route }) => ({ title: `Add Medicine for ${route.params?.targetUserName || 'Member'}` })} />
   </Stack.Navigator>
 );

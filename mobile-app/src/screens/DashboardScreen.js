@@ -57,11 +57,12 @@ const DashboardScreen = ({ navigation }) => {
         api.get(`/schedules/user/${userInfo.id}`),
         api.get(`/stats/user/${userInfo.id}`),
       ]);
-      setSchedules(schedRes.data);
+      const schedData = Array.isArray(schedRes.data) ? schedRes.data : [];
+      setSchedules(schedData);
       setStats(statsRes.data);
 
       // Track low stock items
-      const lowStock = schedRes.data.filter(s => s.currentStock != null && s.currentStock <= 5);
+      const lowStock = schedData.filter(s => s.currentStock != null && s.currentStock <= 5);
       setLowStockItems(lowStock);
 
       // Track already-logged schedules for today
@@ -73,7 +74,7 @@ const DashboardScreen = ({ navigation }) => {
 
       // Cache to AsyncStorage
       const cacheData = {
-        schedules: schedRes.data,
+        schedules: schedData,
         stats: statsRes.data,
         lastUpdated: new Date().toISOString(),
         version: 1,
@@ -352,7 +353,7 @@ const DashboardScreen = ({ navigation }) => {
             // B3: Group schedules by bundle
             const bundled = {};
             const standalone = [];
-            schedules.forEach(item => {
+            (Array.isArray(schedules) ? schedules : []).forEach(item => {
               if (item.bundleName) {
                 if (!bundled[item.bundleName]) bundled[item.bundleName] = [];
                 bundled[item.bundleName].push(item);

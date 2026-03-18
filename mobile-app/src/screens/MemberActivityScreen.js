@@ -1,4 +1,4 @@
-import React, { useState, useContext, useCallback } from 'react';
+import React, { useState, useContext, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList,
   ActivityIndicator, RefreshControl, Alert
@@ -15,7 +15,13 @@ const MemberActivityScreen = ({ route, navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
 
   const isAdmin = group?.admin?.id === userInfo?.id;
-  const memberName = member?.fullName || member?.username || 'Member';
+  // Use contactName passed from GroupDetailsScreen (already resolved)
+  const memberName = route.params?.contactName || member?.fullName || member?.username || 'Member';
+
+  // Update header title to match the resolved contact name
+  useEffect(() => {
+    navigation.setOptions({ title: memberName });
+  }, [memberName, navigation]);
 
   const fetchActivity = useCallback(async () => {
     try {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useContext } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ActivityIndicator, TextInput, Modal, ScrollView, RefreshControl } from 'react-native';
 import * as Contacts from 'expo-contacts';
+import { useFocusEffect } from '@react-navigation/native';
 import api from '../api/client';
 import { AuthContext } from '../context/AuthContext';
 
@@ -32,6 +33,16 @@ const GroupDetailsScreen = ({ route, navigation }) => {
   const [dbSearching, setDbSearching] = useState(false);
   const [contactNameMap, setContactNameMap] = useState({}); // phone last10 -> contact display name
 
+  // R2: Auto-open add member modal when navigated with openAddMember flag
+  // Wait until contacts are loaded before opening
+  const [contactsReady, setContactsReady] = useState(false);
+  const isAdmin = group?.admin?.id === userInfo?.id;
+  useEffect(() => {
+    if (route.params?.openAddMember && isAdmin && contactsReady) {
+      setTimeout(() => setAddMemberVisible(true), 300);
+    }
+  }, [route.params?.openAddMember, contactsReady]);
+
   // Share schedules picker state
   const [shareModalVisible, setShareModalVisible] = useState(false);
   const [userSchedules, setUserSchedules] = useState([]);
@@ -43,7 +54,6 @@ const GroupDetailsScreen = ({ route, navigation }) => {
   const [groupDescription, setGroupDescription] = useState(group?.description || '');
   const [allowTriggers, setAllowTriggers] = useState(group?.allowMemberTriggers || false);
 
-  const isAdmin = group?.admin?.id === userInfo?.id;
 
   const fetchData = useCallback(async () => {
     try {
@@ -63,16 +73,13 @@ const GroupDetailsScreen = ({ route, navigation }) => {
     }
   }, [group.id]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
+  // Load data every time screen gains focus
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
       fetchData();
-    });
-    return unsubscribe;
-  }, [navigation, fetchData]);
+    }, [fetchData])
+  );
 
   // A5: Silently load contact name map on mount so member list shows contact names immediately
   useEffect(() => {
@@ -94,8 +101,10 @@ const GroupDetailsScreen = ({ route, navigation }) => {
           });
         });
         setContactNameMap(phoneMap);
+        setContactsReady(true);
       } catch (e) {
         // Silent fail — not critical
+        setContactsReady(true); // Still mark ready so modal can open
       }
     };
     loadContactNames();
@@ -473,7 +482,7 @@ const GroupDetailsScreen = ({ route, navigation }) => {
         activeOpacity={0.65}
         onPress={() => {
           if (!isSelf) {
-            navigation.navigate('MemberActivity', { member: item, group });
+            navigation.navigate('MemberActivity', { member: item, group, contactName: primaryName });
           }
         }}
       >
@@ -612,55 +621,12 @@ const GroupDetailsScreen = ({ route, navigation }) => {
         {/* Group Header */}
         {renderHeader()}
 
-        {/* ── Reminder Section ── */}
+        {/* ── Settings Section ── */}
+        {isAdmin && (
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>NOTIFICATIONS</Text>
+          <Text style={styles.sectionLabel}>SETTINGS</Text>
           
-          {/* Global Remind Button — admin always sees it, non-admin sees it faded/disabled when triggers are OFF */}
-          <TouchableOpacity
-            style={[
-              styles.globalRemindBtn,
-              !(isAdmin || allowTriggers) && { opacity: 0.4 },
-            ]}
-            onPress={() => {
-              if (!(isAdmin || allowTriggers)) {
-                Alert.alert('Disabled', 'The group admin has not enabled reminders for members.');
-                return;
-              }
-              Alert.alert(
-                '🔔 Send Reminder',
-                'This will send a notification to all group members who haven\'t updated their shared medicines today.',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'Send to All Pending',
-                    onPress: async () => {
-                      try {
-                        // Send reminder to each member (except self)
-                        const targets = members.filter(m => m.id !== userInfo.id);
-                        for (const m of targets) {
-                          await api.post(`/groups/${group.id}/trigger-reminder`, {
-                            triggerUserId: userInfo.id,
-                            targetUserId: m.id,
-                            scheduleId: null,
-                          });
-                        }
-                        Alert.alert('Sent', `Reminders sent to ${targets.length} member(s).`);
-                      } catch (e) {
-                        Alert.alert('Error', 'Failed to send reminders.');
-                      }
-                    },
-                  },
-                ]
-              );
-            }}
-          >
-            <Text style={styles.globalRemindBtnText}>🔔 Send Reminder to Pending Members</Text>
-            <Text style={styles.globalRemindDesc}>Notify members who haven't updated their shared medicines</Text>
-          </TouchableOpacity>
-
           {/* Trigger Toggle — admin only */}
-          {isAdmin && (
             <TouchableOpacity style={styles.triggerToggleRow} onPress={handleToggleTriggers}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.triggerTitle}>Member Reminders</Text>
@@ -674,8 +640,8 @@ const GroupDetailsScreen = ({ route, navigation }) => {
                 <View style={[styles.toggleThumb, allowTriggers && styles.toggleThumbActive]} />
               </View>
             </TouchableOpacity>
-          )}
         </View>
+        )}
 
         {/* ── Members Section ── */}
         <View style={styles.sectionCard}>
@@ -710,28 +676,21 @@ const GroupDetailsScreen = ({ route, navigation }) => {
           />
         </View>
 
-        {/* ── Shared Schedules Section ── */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>SHARED SCHEDULES</Text>
-          <TouchableOpacity style={styles.addMemberBtn} onPress={handleShareSchedules}>
-            <Text style={styles.addMemberBtnText}>📊 Share My Schedules</Text>
-          </TouchableOpacity>
-          <FlatList
-            data={sharedSchedules}
-            renderItem={renderScheduleItem}
-            keyExtractor={(item, idx) => String(item.id || idx)}
-            scrollEnabled={false}
-            ListEmptyComponent={
-              <View style={{ alignItems: 'center', paddingVertical: 20 }}>
-                <Text style={{ fontSize: 28, marginBottom: 6 }}>📋</Text>
-                <Text style={styles.emptyText}>No shared schedules</Text>
-                <Text style={{ fontSize: 12, color: '#95a5a6', marginTop: 4, textAlign: 'center' }}>
-                  Tap "Share My Schedules" to let group members see your medications
-                </Text>
-              </View>
-            }
-          />
-        </View>
+        {/* ── Shared Schedules — tappable row to separate page ── */}
+        <TouchableOpacity
+          style={[styles.sectionCard, { flexDirection: 'row', alignItems: 'center', paddingVertical: 16 }]}
+          onPress={() => navigation.navigate('SharedSchedules', { group })}
+          activeOpacity={0.7}
+        >
+          <Text style={{ fontSize: 22, marginRight: 12 }}>📊</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: '#1e293b' }}>Shared Schedules</Text>
+            <Text style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
+              {sharedSchedules.length > 0 ? `${sharedSchedules.length} schedule${sharedSchedules.length !== 1 ? 's' : ''} shared` : 'Share & manage medication schedules'}
+            </Text>
+          </View>
+          <Text style={{ fontSize: 18, color: '#94a3b8' }}>›</Text>
+        </TouchableOpacity>
 
         {/* ── Leave / Exit ── */}
         {!isAdmin && (

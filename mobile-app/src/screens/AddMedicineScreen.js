@@ -263,9 +263,11 @@ const AddMedicineScreen = ({ navigation, route }) => {
 
   const isAsNeeded = frequencyType === 'AS_NEEDED';
 
+  const scrollRef = useRef(null);
+
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         
         {/* Admin creating for member banner */}
         {targetUserName && (
@@ -472,32 +474,39 @@ const AddMedicineScreen = ({ navigation, route }) => {
           placeholder="e.g., Morning Meds, Heart Pills"
           placeholderTextColor="#bdc3c7"
           autoCapitalize="words"
+          onFocus={() => {
+            // Auto-scroll to make bundle input visible above keyboard
+            setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
+          }}
         />
-        {/* Bundle suggestions — show existing bundles as tappable chips */}
+        {/* Bundle suggestions */}
         {(() => {
           const filtered = bundleName.trim()
             ? existingBundles.filter(b => b.toLowerCase().includes(bundleName.toLowerCase()) && b !== bundleName)
             : existingBundles;
           if (filtered.length > 0) {
             return (
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: -4, marginBottom: 12 }}>
-                {filtered.map(b => (
-                  <TouchableOpacity
-                    key={b}
-                    style={{ backgroundColor: '#eef2ff', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: '#c7d2fe' }}
-                    onPress={() => setBundleName(b)}
-                  >
-                    <Text style={{ fontSize: 12, color: '#4f46e5', fontWeight: '600' }}>📦 {b}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8, marginBottom: 12 }}>
+                <View style={{ flexDirection: 'row', gap: 8, paddingRight: 16 }}>
+                  {filtered.map(b => (
+                    <TouchableOpacity
+                      key={b}
+                      style={styles.bundleChip}
+                      onPress={() => setBundleName(b)}
+                    >
+                      <Text style={styles.bundleChipIcon}>📦</Text>
+                      <Text style={styles.bundleChipText}>{b}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
             );
           }
           return (
-            <Text style={{ fontSize: 12, color: '#7f8383', marginLeft: 5, marginBottom: 12 }}>
+            <Text style={{ fontSize: 12, color: '#94a3b8', marginLeft: 5, marginTop: 4, marginBottom: 12 }}>
               {existingBundles.length === 0
-                ? '*Group medicines together under one label on your dashboard'
-                : 'Or type a new bundle name to create one'}
+                ? 'Group medicines together under one label on your dashboard'
+                : 'Or type a new name to create one'}
             </Text>
           );
         })()}
@@ -613,6 +622,16 @@ const styles = StyleSheet.create({
   removeTimeBtnText: { color: '#e74c3c', fontWeight: '700', fontSize: 16 },
   addTimeBtn: { marginTop: 4, marginBottom: 8 },
   addTimeBtnText: { color: '#3498db', fontWeight: '600', fontSize: 14 },
+
+  // Bundle suggestion chips
+  bundleChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#eef2ff', paddingHorizontal: 14, paddingVertical: 10,
+    borderRadius: 20, borderWidth: 1.5, borderColor: '#c7d2fe',
+  },
+  bundleChipIcon: { fontSize: 14 },
+  bundleChipText: { fontSize: 13, color: '#4338ca', fontWeight: '600' },
+
 
   saveBtn: {
     backgroundColor: '#27ae60', paddingVertical: 16, borderRadius: 12,
