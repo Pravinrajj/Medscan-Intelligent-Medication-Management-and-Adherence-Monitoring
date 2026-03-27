@@ -3,7 +3,7 @@ MediScan OCR — Image Preprocessing Module
 ==========================================
 Applies OpenCV-based preprocessing to enhance prescription images
 before OCR extraction. Handles grayscale conversion, noise reduction,
-contrast enhancement, thresholding, and resizing.
+contrast enhancement, thresholding, resizing, and optional header cropping.
 """
 
 import cv2
@@ -35,6 +35,51 @@ THRESHOLD_CONSTANT = 2
 
 # Maximum dimension for processing (resize if larger to save time)
 MAX_DIMENSION = 2000
+
+# Default header crop ratio (10% of image height)
+DEFAULT_HEADER_CROP_RATIO = 0.10
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Header Cropping (NEW)
+# ═══════════════════════════════════════════════════════════════════
+
+def crop_header(image: np.ndarray, crop_ratio: float = DEFAULT_HEADER_CROP_RATIO) -> np.ndarray:
+    """
+    Optionally crop the top portion of the image to remove header content
+    (hospital name, logo, letterhead). This is a coarse first pass —
+    fine-grained spatial filtering is done later using bounding boxes.
+
+    Args:
+        image: Input image (BGR or grayscale)
+        crop_ratio: Fraction of image height to remove from top.
+                    Default 0.10 (10%). Set to 0.0 to disable cropping.
+                    Max recommended: 0.15 (15%).
+
+    Returns:
+        Cropped image with top portion removed, or original if ratio is 0
+    """
+    if crop_ratio <= 0.0:
+        logger.debug("Header cropping disabled (ratio=0)")
+        return image
+
+    # Clamp to reasonable range
+    crop_ratio = min(crop_ratio, 0.20)
+
+    h, w = image.shape[:2]
+    crop_pixels = int(h * crop_ratio)
+
+    if crop_pixels < 10:
+        # Too few pixels to crop — skip
+        logger.debug(f"Header crop skipped (would remove only {crop_pixels}px)")
+        return image
+
+    cropped = image[crop_pixels:, :]
+    logger.info(
+        f"Header cropped: removed top {crop_pixels}px "
+        f"({crop_ratio*100:.0f}%), {w}x{h} → {w}x{h - crop_pixels}"
+    )
+    return cropped
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -179,8 +224,11 @@ def preprocess_image(image: np.ndarray) -> np.ndarray:
         4. Noise reduction (Gaussian + NLM)
         5. Adaptive thresholding (binary)
 
+    Note: Header cropping should be called BEFORE this function
+    if desired (see crop_header()).
+
     Args:
-        image: Raw input image (BGR format from cv2.imread)
+        image: Input image (BGR format from cv2.imread), optionally pre-cropped
 
     Returns:
         Preprocessed binary image ready for OCR

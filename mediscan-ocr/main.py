@@ -1,11 +1,14 @@
 """
-MediScan OCR — FastAPI Entry Point
-====================================
-Production-ready API for prescription text extraction.
+MediScan OCR — FastAPI Entry Point (v3.1)
+==========================================
+Production-ready API for prescription text extraction with
+intelligent filtering optimized for noisy handwritten prescriptions,
+plus tablet strip medicine name extraction.
 
 Endpoints:
-    POST /extract-text/  — Upload prescription image, get structured OCR output
-    GET  /health         — Service health check
+    POST /extract-text/          — Extract structured data from prescription images
+    POST /extract-medicine-name/ — Extract medicine name from tablet strip images
+    GET  /health                 — Service health check
 
 Usage:
     uvicorn main:app --host 0.0.0.0 --port 8000 --reload
@@ -24,9 +27,16 @@ import numpy as np
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from preprocess import preprocess_image
+from preprocess import preprocess_image, crop_header
 from ocr import load_ocr_model, extract_text, is_model_loaded
-from parser import parse_prescription_text
+from filter import positional_filter, keyword_filter_lines
+from cleaner import clean_detections, group_into_lines
+from parser import parse_lines
+from strip_reader import extract_medicine_name
+from medicine_db import load_database, is_database_loaded, get_database_size, lookup_medicine, lookup_multiple, process_prescription_lines
+
+# Path to the medicine CSV database (relative to project root)
+MEDICINE_DB_CSV = Path(__file__).resolve().parent.parent / "medicine_data.csv"
 
 # ═══════════════════════════════════════════════════════════════════
 # Configuration
@@ -36,7 +46,6 @@ TEMP_DIR = Path("temp")
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp"}
 MAX_FILE_SIZE_MB = 10
 
-# Logging setup
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(name)-22s | %(levelname)-7s | %(message)s",
@@ -51,34 +60,37 @@ logger = logging.getLogger("mediscan.main")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Startup: Load EasyOCR model + create temp directory.
-    Shutdown: Clean up temp files.
-    """
+    """Startup: Load EasyOCR model + create temp dir. Shutdown: cleanup."""
     logger.info("=" * 60)
-    logger.info("  MediScan OCR Service — Starting Up")
+    logger.info("  MediScan OCR Service — Starting Up (v4.0)")
+    logger.info("  With medicine database integration")
     logger.info("=" * 60)
 
-    # Create temp directory for uploaded images
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
     logger.info(f"Temp directory: {TEMP_DIR.absolute()}")
 
-    # Load EasyOCR model globally (one-time expensive operation)
+    # Load EasyOCR model
     logger.info("Loading EasyOCR model (this may take a moment)...")
     model_loaded = load_ocr_model(gpu=False)
-
     if model_loaded:
         logger.info("✅ EasyOCR model loaded successfully")
     else:
         logger.error("❌ Failed to load EasyOCR model — API will return errors")
 
+    # Load medicine database
+    logger.info(f"Loading medicine database from: {MEDICINE_DB_CSV}")
+    db_loaded = load_database(str(MEDICINE_DB_CSV))
+    if db_loaded:
+        logger.info(f"✅ Medicine database loaded ({get_database_size()} entries)")
+    else:
+        logger.warning("⚠️ Medicine database not loaded — DB lookups will be unavailable")
+
     logger.info("🚀 MediScan OCR Service ready!")
     logger.info("   Docs: http://localhost:8000/docs")
     logger.info("=" * 60)
 
-    yield  # Application runs here
+    yield
 
-    # Shutdown: clean up temp files
     logger.info("Shutting down — cleaning temp files...")
     _cleanup_temp_dir()
     logger.info("MediScan OCR Service stopped")
@@ -91,15 +103,18 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="MediScan OCR API",
     description=(
-        "Prescription text extraction API using EasyOCR.\n\n"
-        "Upload a prescription image and receive structured medicine data "
-        "including medicine name, dosage, and frequency."
+        "Prescription text extraction API using EasyOCR with intelligent "
+        "filtering optimized for handwritten prescriptions.\n\n"
+        "**Endpoints:**\n"
+        "- `POST /extract-text/` — Prescription image → structured medicine data\n"
+        "- `POST /extract-medicine-name/` — Tablet strip image → medicine name\n\n"
+        "Matched against a 195K-entry medicine database for accurate identification. "
+        "Returns full details: composition, manufacturer, side effects, interactions."
     ),
-    version="1.0.0",
+    version="4.0.0",
     lifespan=lifespan,
 )
 
-# CORS — allow mobile app and frontend access
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -115,35 +130,32 @@ app.add_middleware(
 
 @app.get("/health")
 async def health_check():
-    """
-    Service health check.
-
-    Returns model status, uptime info, and temp directory status.
-    """
+    """Service health check."""
     return {
         "status": "healthy",
+        "version": "4.0.0",
         "model_loaded": is_model_loaded(),
+        "database_loaded": is_database_loaded(),
+        "database_size": get_database_size(),
         "timestamp": datetime.now().isoformat(),
-        "temp_dir": str(TEMP_DIR.absolute()),
     }
 
 
 @app.post("/extract-text/")
 async def extract_text_from_prescription(file: UploadFile = File(...)):
     """
-    Extract text from a prescription image.
+    Extract medicine-related text from a prescription image.
 
-    **Accepts:** Image file (`multipart/form-data`) — JPEG, PNG, BMP, TIFF, WebP
-
-    **Returns:** JSON with raw OCR text and structured medicine data.
-
-    **Pipeline:**
-    1. Validate uploaded file (type + size)
-    2. Save to temp storage
-    3. Preprocess image (grayscale, denoise, threshold)
-    4. Extract text via EasyOCR
-    5. Parse structured medicine info (name, dosage, frequency)
-    6. Return JSON response + clean up temp file
+    **Pipeline (v3 — recall-first):**
+    1. Validate + save uploaded image
+    2. Optional header crop (top 10%)
+    3. EasyOCR extraction (low confidence threshold = 0.1)
+    4. Positional filter — keep text in 25%–85% vertical band
+    5. OCR error correction (clean garbled text)
+    6. Group nearby bounding boxes into full lines
+    7. Keyword filter — keep only medicine-related lines
+    8. Parse structured medicine data (name, dosage, frequency)
+    9. Return JSON response
     """
     start_time = time.time()
     request_id = str(uuid.uuid4())[:8]
@@ -152,14 +164,11 @@ async def extract_text_from_prescription(file: UploadFile = File(...)):
     logger.info(f"[{request_id}] New request: filename={file.filename}")
 
     try:
-        # ── Step 1: Validate file ─────────────────────────────────
+        # ── Step 1: Validate + Save ───────────────────────────────
         _validate_file(file)
-
-        # ── Step 2: Save to temp ──────────────────────────────────
         temp_path = await _save_temp_file(file, request_id)
-        logger.info(f"[{request_id}] Saved temp file: {temp_path}")
 
-        # ── Step 3: Read and preprocess image ─────────────────────
+        # ── Step 2: Read image ────────────────────────────────────
         image = cv2.imread(str(temp_path))
         if image is None:
             raise HTTPException(
@@ -167,73 +176,247 @@ async def extract_text_from_prescription(file: UploadFile = File(...)):
                 detail="Could not decode image — file may be corrupted"
             )
 
-        logger.info(f"[{request_id}] Image loaded: {image.shape[1]}x{image.shape[0]}px")
+        image_height, image_width = image.shape[:2]
+        logger.info(f"[{request_id}] Image: {image_width}x{image_height}px")
 
-        # Preprocess (grayscale, denoise, threshold)
-        preprocessed = preprocess_image(image)
+        # ── Step 3: Optional header crop ──────────────────────────
+        cropped_image = crop_header(image, crop_ratio=0.10)
+        cropped_height = cropped_image.shape[0]
 
         # ── Step 4: OCR extraction ────────────────────────────────
         if not is_model_loaded():
             raise HTTPException(
                 status_code=503,
-                detail="OCR model not loaded — service is starting up, try again"
+                detail="OCR model not loaded — service is starting up"
             )
 
-        ocr_result = extract_text(preprocessed)
-
+        ocr_result = extract_text(cropped_image)
         if ocr_result is None:
-            raise HTTPException(
-                status_code=500,
-                detail="OCR extraction failed — internal error"
-            )
+            raise HTTPException(status_code=500, detail="OCR extraction failed")
 
-        raw_text = ocr_result.raw_text
-        logger.info(f"[{request_id}] OCR raw text: '{raw_text[:100]}...'")
+        logger.info(
+            f"[{request_id}] OCR: {ocr_result.detection_count} detections, "
+            f"raw='{ocr_result.raw_text[:100]}...'"
+        )
 
-        # ── Step 5: Parse structured medicine data ────────────────
-        structured_data = parse_prescription_text(raw_text)
+        # ── Step 5: Positional filter (NO keyword check) ─────────
+        pos_result = positional_filter(
+            detections=ocr_result.detections,
+            image_height=cropped_height,
+            header_cutoff=0.25,  # Skip top 25%
+            footer_cutoff=0.85,  # Skip bottom 15%
+        )
 
-        # ── Step 6: Build response ────────────────────────────────
+        logger.info(
+            f"[{request_id}] Positional: {pos_result.kept_count}/"
+            f"{pos_result.total_detections} kept"
+        )
+
+        # ── Step 6: OCR error correction ──────────────────────────
+        cleaned_detections = clean_detections(pos_result.filtered_detections)
+
+        logger.info(
+            f"[{request_id}] Cleaned: "
+            f"{' | '.join(d.text for d in cleaned_detections[:5])}..."
+        )
+
+        # ── Step 7: Group into text lines ─────────────────────────
+        text_lines = group_into_lines(cleaned_detections)
+
+        logger.info(
+            f"[{request_id}] Grouped into {len(text_lines)} lines: "
+            f"{[l.text for l in text_lines[:5]]}"
+        )
+
+        # ── Step 8: Keyword filter (on cleaned, grouped lines) ────
+        med_lines = keyword_filter_lines(text_lines)
+
+        logger.info(
+            f"[{request_id}] Keyword filter: {len(med_lines)}/{len(text_lines)} "
+            f"lines kept"
+        )
+
+        # ── Step 9: Parse structured medicine data ────────────────
+        structured_data = parse_lines(med_lines)
+
+        # ── Step 10: Per-line DB matching (multi-medicine) ────────
+        #   Each medicine line is independently cleaned, matched
+        #   against the 195K-entry DB, and deduplicated.
+        medicines = process_prescription_lines(med_lines, threshold=75.0)
+
+        # Also enrich parser results with DB lookups as fallback
+        # (catches medicines the per-line matcher might miss)
+        parser_names = {m.medicine.lower() for m in structured_data}
+        matched_names = {m["matched_name"].lower() for m in medicines if m.get("matched_name")}
+
+        for med in structured_data:
+            if med.medicine.lower() not in matched_names:
+                match = lookup_medicine(med.medicine)
+                if match.matched_name and match.match_score >= 75.0:
+                    dedup_key = match.matched_name.lower()
+                    if dedup_key not in matched_names:
+                        matched_names.add(dedup_key)
+                        entry = {
+                            "extracted_text": med.raw_line or med.medicine,
+                            "matched_name": match.matched_name,
+                            "match_score": round(match.match_score, 2),
+                            "details": match.details if match.details else {},
+                        }
+                        medicines.append(entry)
+
+        logger.info(
+            f"[{request_id}] Multi-medicine: {len(medicines)} unique medicine(s)"
+        )
+
+        # ── Step 11: Build response ───────────────────────────────
         elapsed_ms = int((time.time() - start_time) * 1000)
 
         response = {
             "filename": file.filename,
-            "raw_text": raw_text,
-            "structured_data": [m.to_dict() for m in structured_data],
+            "raw_text": ocr_result.raw_text,
+            "medicines": medicines,
             "confidence": {
                 "average": ocr_result.avg_confidence,
                 "min": ocr_result.min_confidence,
                 "max": ocr_result.max_confidence,
             },
-            "word_count": ocr_result.word_count,
+            "pipeline_stats": {
+                "total_ocr_detections": ocr_result.detection_count,
+                "after_positional_filter": pos_result.kept_count,
+                "grouped_lines": len(text_lines),
+                "after_keyword_filter": len(med_lines),
+                "medicines_found": len(medicines),
+            },
             "processing_time_ms": elapsed_ms,
         }
 
         logger.info(
             f"[{request_id}] ✅ Complete: "
             f"{len(structured_data)} medicine(s), "
-            f"{ocr_result.word_count} words, "
             f"{elapsed_ms}ms"
         )
 
         return response
 
     except HTTPException:
-        raise  # Re-raise FastAPI HTTP exceptions as-is
+        raise
 
     except Exception as e:
         logger.error(f"[{request_id}] Unexpected error: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Internal server error: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
     finally:
-        # ── Clean up temp file ────────────────────────────────────
         if temp_path and temp_path.exists():
             try:
                 temp_path.unlink()
-                logger.debug(f"[{request_id}] Temp file cleaned up: {temp_path}")
+            except Exception as e:
+                logger.warning(f"[{request_id}] Failed to clean up temp: {e}")
+
+
+@app.post("/extract-medicine-name/")
+async def extract_medicine_name_from_strip(file: UploadFile = File(...)):
+    """
+    Extract the medicine/brand name from a tablet strip (blister pack) image.
+
+    **Pipeline:**
+    1. Validate + save uploaded image
+    2. Run EasyOCR on the strip image
+    3. Filter noise (dosage, batch, manufacturer, dates)
+    4. Score candidates (length, uppercase, position, confidence)
+    5. Select highest-scoring candidate
+    6. Post-process (remove suffix words, normalize)
+
+    **Returns:** `{medicine_name, confidence}` with top candidates for debugging.
+    """
+    start_time = time.time()
+    request_id = str(uuid.uuid4())[:8]
+    temp_path = None
+
+    logger.info(f"[{request_id}] Strip reader request: filename={file.filename}")
+
+    try:
+        # ── Step 1: Validate + Save ───────────────────────────────
+        _validate_file(file)
+        temp_path = await _save_temp_file(file, request_id)
+
+        # ── Step 2: Read image ────────────────────────────────────
+        image = cv2.imread(str(temp_path))
+        if image is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Could not decode image — file may be corrupted"
+            )
+
+        image_height, image_width = image.shape[:2]
+        logger.info(f"[{request_id}] Strip image: {image_width}x{image_height}px")
+
+        # ── Step 3: OCR extraction ────────────────────────────────
+        if not is_model_loaded():
+            raise HTTPException(
+                status_code=503,
+                detail="OCR model not loaded — service is starting up"
+            )
+
+        ocr_result = extract_text(image)
+        if ocr_result is None:
+            raise HTTPException(status_code=500, detail="OCR extraction failed")
+
+        logger.info(
+            f"[{request_id}] OCR: {ocr_result.detection_count} detections "
+            f"from strip image"
+        )
+
+        # ── Step 4: Extract medicine name ─────────────────────────
+        strip_result = extract_medicine_name(
+            detections=ocr_result.detections,
+            image_height=image_height,
+        )
+
+        # ── Step 5: Database lookup ────────────────────────────────
+        db_match = None
+        if strip_result.medicine_name:
+            db_match = lookup_medicine(strip_result.medicine_name)
+            logger.info(
+                f"[{request_id}] DB lookup: '{strip_result.medicine_name}' → "
+                f"'{db_match.matched_name}' (score={db_match.match_score:.1f})"
+            )
+
+        # ── Step 6: Build response ────────────────────────────────
+        elapsed_ms = int((time.time() - start_time) * 1000)
+
+        response = {
+            "medicine_name": strip_result.medicine_name,
+            "confidence": round(strip_result.confidence, 4),
+            "raw_text": strip_result.raw_text,
+            "top_candidates": [
+                c.to_dict() for c in strip_result.all_candidates[:5]
+            ],
+            "processing_time_ms": elapsed_ms,
+        }
+
+        # Add database match if found
+        if db_match:
+            response["db_match"] = db_match.to_dict()
+
+        logger.info(
+            f"[{request_id}] ✅ Strip result: "
+            f"'{strip_result.medicine_name}' "
+            f"(conf={strip_result.confidence:.3f}, {elapsed_ms}ms)"
+        )
+
+        return response
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        logger.error(f"[{request_id}] Unexpected error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+    finally:
+        if temp_path and temp_path.exists():
+            try:
+                temp_path.unlink()
             except Exception as e:
                 logger.warning(f"[{request_id}] Failed to clean up temp: {e}")
 
@@ -243,27 +426,15 @@ async def extract_text_from_prescription(file: UploadFile = File(...)):
 # ═══════════════════════════════════════════════════════════════════
 
 def _validate_file(file: UploadFile) -> None:
-    """
-    Validate the uploaded file:
-      - Must have a filename
-      - Extension must be an allowed image type
-      - Content type must be image/*
-    """
+    """Validate uploaded file type and content type."""
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
-
-    # Check file extension
     ext = Path(file.filename).suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
-            detail=(
-                f"Unsupported file type: '{ext}'. "
-                f"Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
-            )
+            detail=f"Unsupported file type: '{ext}'. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
         )
-
-    # Check content type
     if file.content_type and not file.content_type.startswith("image/"):
         raise HTTPException(
             status_code=400,
@@ -272,29 +443,18 @@ def _validate_file(file: UploadFile) -> None:
 
 
 async def _save_temp_file(file: UploadFile, request_id: str) -> Path:
-    """
-    Save the uploaded file to the temp directory with a unique name.
-
-    Returns:
-        Path to the saved temp file
-    """
-    ext = Path(file.filename).suffix.lower()
+    """Save uploaded file to temp directory."""
     temp_filename = f"{request_id}_{file.filename}"
     temp_path = TEMP_DIR / temp_filename
-
     contents = await file.read()
-
-    # Check file size
     size_mb = len(contents) / (1024 * 1024)
     if size_mb > MAX_FILE_SIZE_MB:
         raise HTTPException(
             status_code=400,
             detail=f"File too large: {size_mb:.1f}MB (max: {MAX_FILE_SIZE_MB}MB)"
         )
-
     with open(temp_path, "wb") as f:
         f.write(contents)
-
     return temp_path
 
 
