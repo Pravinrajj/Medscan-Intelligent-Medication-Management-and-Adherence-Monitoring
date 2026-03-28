@@ -1,0 +1,19 @@
+# MediScan OCR — Dependencies
+# ====================================
+
+# Web framework
+fastapi==0.115.6
+uvicorn==0.34.0
+python-multipart==0.0.20
+
+# OCR engine
+easyocr>=1.7.0
+
+# Image processing
+opencv-python-headless>=4.8.0
+Pillow>=10.0.0
+numpy>=1.24.0
+
+# Medicine database
+pandas>=2.0.0
+rapidfuzz>=3.0.0
