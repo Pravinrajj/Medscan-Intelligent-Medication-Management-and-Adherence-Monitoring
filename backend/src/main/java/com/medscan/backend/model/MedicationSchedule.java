@@ -57,6 +57,9 @@ public class MedicationSchedule {
     @Column(name = "custom_days")
     private String customDays; // e.g., "MON,WED,FRI" for CUSTOM frequency
 
+    @Column(name = "bundle_name")
+    private String bundleName; // Optional: group medicines into a bundle (e.g., "Morning Meds")
+
     @OneToMany(mappedBy = "medicationSchedule", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @Fetch(FetchMode.SUBSELECT)
     private List<ScheduleTime> scheduleTimes = new ArrayList<>();

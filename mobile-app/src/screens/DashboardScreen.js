@@ -8,6 +8,9 @@ import MedicationItem from '../components/MedicationItem';
 import AdherenceChart from '../components/AdherenceChart';
 import offlineSyncService from '../services/OfflineSyncService';
 
+// B1: Track which bundles are collapsed
+let collapsedBundlesState = {};
+
 const formatCacheAge = (isoString) => {
   const diff = Date.now() - new Date(isoString).getTime();
   const mins = Math.floor(diff / 60000);
@@ -28,6 +31,7 @@ const DashboardScreen = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
   const [loggedSchedules, setLoggedSchedules] = useState(new Set());
+  const [snoozedSchedules, setSnoozedSchedules] = useState(new Set());
   const [isOnline, setIsOnline] = useState(true);
   const [cachedAt, setCachedAt] = useState(null);
   const [isFromCache, setIsFromCache] = useState(false);
@@ -53,11 +57,12 @@ const DashboardScreen = ({ navigation }) => {
         api.get(`/schedules/user/${userInfo.id}`),
         api.get(`/stats/user/${userInfo.id}`),
       ]);
-      setSchedules(schedRes.data);
+      const schedData = Array.isArray(schedRes.data) ? schedRes.data : [];
+      setSchedules(schedData);
       setStats(statsRes.data);
 
       // Track low stock items
-      const lowStock = schedRes.data.filter(s => s.currentStock != null && s.currentStock <= 5);
+      const lowStock = schedData.filter(s => s.currentStock != null && s.currentStock <= 5);
       setLowStockItems(lowStock);
 
       // Track already-logged schedules for today
@@ -69,7 +74,7 @@ const DashboardScreen = ({ navigation }) => {
 
       // Cache to AsyncStorage
       const cacheData = {
-        schedules: schedRes.data,
+        schedules: schedData,
         stats: statsRes.data,
         lastUpdated: new Date().toISOString(),
         version: 1,
@@ -195,12 +200,45 @@ const DashboardScreen = ({ navigation }) => {
       } else {
         Alert.alert("Snoozed ⏰", "We'll remind you again later.");
       }
-      setLoggedSchedules(prev => new Set([...prev, scheduleId]));
+      setSnoozedSchedules(prev => new Set([...prev, scheduleId]));
       fetchData();
     } catch (e) {
       console.error(e);
       Alert.alert("Error", "Failed to snooze.");
     }
+  };
+
+  const handleUndo = async (scheduleId) => {
+    Alert.alert(
+      "Undo Status",
+      "This will remove today's recorded status for this medicine. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Undo",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await api.delete(`/adherence/undo?userId=${userInfo.id}&scheduleId=${scheduleId}`);
+              setLoggedSchedules(prev => {
+                const next = new Set(prev);
+                next.delete(scheduleId);
+                return next;
+              });
+              setSnoozedSchedules(prev => {
+                const next = new Set(prev);
+                next.delete(scheduleId);
+                return next;
+              });
+              Alert.alert("Undone", "Status has been reset. You can re-record it.");
+              fetchData();
+            } catch (e) {
+              Alert.alert("Error", e.response?.data?.message || "Failed to undo.");
+            }
+          }
+        }
+      ]
+    );
   };
 
   if (loading) {
@@ -228,17 +266,6 @@ const DashboardScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      {/* Offline Banner */}
-      {!isOnline && (
-        <View style={{backgroundColor: '#e74c3c', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, marginBottom: 10, flexDirection: 'row', alignItems: 'center'}}>
-          <Text style={{color: '#fff', fontWeight: '600', flex: 1}}>📡 You're offline — actions will be saved and synced later</Text>
-        </View>
-      )}
-      {isFromCache && cachedAt && (
-        <View style={{backgroundColor: '#f39c12', paddingVertical: 6, paddingHorizontal: 16, borderRadius: 8, marginBottom: 10, flexDirection: 'row', alignItems: 'center'}}>
-          <Text style={{color: '#fff', fontWeight: '600', flex: 1, fontSize: 12}}>📦 Showing cached data — last updated {formatCacheAge(cachedAt)}</Text>
-        </View>
-      )}
       <ScrollView 
         refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -252,6 +279,18 @@ const DashboardScreen = ({ navigation }) => {
             </View>
         </View>
 
+        {/* Offline / Cache banners — compact, non-overlapping */}
+        {!isOnline && (
+          <View style={styles.offlineBanner}>
+            <Text style={styles.offlineBannerText}>📡 Offline — actions saved locally</Text>
+          </View>
+        )}
+        {isFromCache && cachedAt && (
+          <View style={styles.cacheBanner}>
+            <Text style={styles.cacheBannerText}>📦 Cached data — {formatCacheAge(cachedAt)}</Text>
+          </View>
+        )}
+
         {/* Low Stock Alert */}
         {lowStockItems.length > 0 && (
             <View style={styles.alertCard}>
@@ -263,46 +302,42 @@ const DashboardScreen = ({ navigation }) => {
                 ))}
             </View>
         )}
-
-        {/* Adherence Stats */}
+        
+        {/* ===== STATS & CHART — below schedules ===== */}
         {stats && (
-            <View style={styles.statsCard}>
-                <Text style={styles.statsTitle}>Today's Adherence</Text>
-                <View style={styles.adherenceRow}>
-                    <Text style={[styles.adherenceRate, { color: getAdherenceColor(stats.adherenceRate || 0) }]}>
-                        {stats.adherenceRate || 0}%
-                    </Text>
-                </View>
-                <View style={styles.statsGrid}>
-                    <View style={styles.statItem}>
-                        <Text style={styles.statValue}>{stats.takenCount || 0}</Text>
-                        <Text style={styles.statLabel}>Taken</Text>
+            <View style={styles.statsCompact}>
+                <View style={styles.statsRow}>
+                    <View style={styles.statPill}>
+                        <Text style={[styles.statPillValue, { color: getAdherenceColor(stats.adherenceRate || 0) }]}>
+                            {stats.adherenceRate || 0}%
+                        </Text>
+                        <Text style={styles.statPillLabel}>Adherence</Text>
                     </View>
-                    <View style={styles.statItem}>
-                        <Text style={styles.statValue}>{stats.snoozedCount || 0}</Text>
-                        <Text style={styles.statLabel}>Snoozed</Text>
+                    <View style={styles.statPill}>
+                        <Text style={styles.statPillValue}>{stats.takenCount || 0}</Text>
+                        <Text style={styles.statPillLabel}>Taken</Text>
                     </View>
-                    <View style={styles.statItem}>
-                        <Text style={styles.statValue}>{stats.missedCount || 0}</Text>
-                        <Text style={styles.statLabel}>Missed</Text>
+                    <View style={styles.statPill}>
+                        <Text style={styles.statPillValue}>{stats.snoozedCount || 0}</Text>
+                        <Text style={styles.statPillLabel}>Snoozed</Text>
+                    </View>
+                    <View style={styles.statPill}>
+                        <Text style={styles.statPillValue}>{stats.missedCount || 0}</Text>
+                        <Text style={styles.statPillLabel}>Missed</Text>
                     </View>
                 </View>
             </View>
         )}
 
-        {/* Adherence Chart */}
+        {/* Weekly Chart */}
         <AdherenceChart dailyBreakdown={stats?.dailyBreakdown} />
 
+        {/* ===== SCHEDULES FIRST — the primary content ===== */}
         <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Today's Schedule</Text>
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-                <TouchableOpacity onPress={() => navigation.navigate('AddMedicine')}>
-                    <Text style={styles.addLink}>+ Add</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => navigation.navigate('ScanPrescription')}>
-                    <Text style={styles.scanLink}>📷 Scan</Text>
-                </TouchableOpacity>
-            </View>
+            <TouchableOpacity onPress={() => navigation.navigate('ScanPrescription')}>
+                <Text style={styles.scanLink}>📷 Scan</Text>
+            </TouchableOpacity>
         </View>
         
         {schedules.length === 0 ? (
@@ -314,23 +349,97 @@ const DashboardScreen = ({ navigation }) => {
                    <Text style={styles.addMedText}>+ Add Medication</Text>
                </TouchableOpacity>
            </View>
-        ) : (
+        ) : (() => {
+            // B3: Group schedules by bundle
+            const bundled = {};
+            const standalone = [];
+            (Array.isArray(schedules) ? schedules : []).forEach(item => {
+              if (item.bundleName) {
+                if (!bundled[item.bundleName]) bundled[item.bundleName] = [];
+                bundled[item.bundleName].push(item);
+              } else {
+                standalone.push(item);
+              }
+            });
+            const bundleNames = Object.keys(bundled);
+
+            return (
             <View style={styles.listContainer}>
-                {schedules.map(item => (
+                {/* Bundled medicines */}
+                {bundleNames.map(bName => {
+                  const items = bundled[bName];
+                  const takenCount = items.filter(i => loggedSchedules.has(i.id)).length;
+                  const isCollapsed = collapsedBundlesState[bName];
+                  return (
+                  <View key={bName} style={styles.bundleSection}>
+                    <TouchableOpacity
+                      style={styles.bundleHeader}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        collapsedBundlesState = { ...collapsedBundlesState, [bName]: !isCollapsed };
+                        // Force re-render
+                        setSchedules([...schedules]);
+                      }}
+                    >
+                      <Text style={styles.bundleTitle}>📦 {bName}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text style={[
+                          styles.bundleCount,
+                          takenCount === items.length && { color: '#27ae60' },
+                        ]}>
+                          {takenCount}/{items.length} taken
+                        </Text>
+                        <Text style={{ fontSize: 14, color: '#95a5a6' }}>{isCollapsed ? '▸' : '▾'}</Text>
+                      </View>
+                    </TouchableOpacity>
+                    {!isCollapsed && items.map(item => (
+                      <MedicationItem 
+                        key={item.id} 
+                        schedule={item} 
+                        onTaken={() => handleTakeDose(item.id)} 
+                        onMissed={() => handleMissDose(item.id)}
+                        onSnooze={() => handleSnooze(item.id)}
+                        onUndo={() => handleUndo(item.id)}
+                        onPress={() => navigation.navigate('MedicineDetail', { schedule: item })} 
+                        loggedToday={loggedSchedules.has(item.id)}
+                        snoozedToday={snoozedSchedules.has(item.id)}
+                      />
+                    ))}
+                  </View>
+                  );
+                })}
+
+                {/* Standalone medicines (no bundle) */}
+                {standalone.map(item => (
                     <MedicationItem 
                       key={item.id} 
                       schedule={item} 
                       onTaken={() => handleTakeDose(item.id)} 
                       onMissed={() => handleMissDose(item.id)}
                       onSnooze={() => handleSnooze(item.id)}
+                      onUndo={() => handleUndo(item.id)}
                       onPress={() => navigation.navigate('MedicineDetail', { schedule: item })} 
                       loggedToday={loggedSchedules.has(item.id)}
+                      snoozedToday={snoozedSchedules.has(item.id)}
                     />
                 ))}
             </View>
-        )}
+            );
+        })()}
+
+
       </ScrollView>
 
+      {/* Floating Add Button — visible only when there are schedules */}
+      {schedules.length > 0 && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => navigation.navigate('AddMedicine')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.fabText}>+</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 };
@@ -341,12 +450,26 @@ const styles = StyleSheet.create({
   header: {
     padding: 25, paddingTop: 50, backgroundColor: '#ffffff',
     borderBottomLeftRadius: 24, borderBottomRightRadius: 24,
-    marginBottom: 16,
+    marginBottom: 12,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05, shadowRadius: 8, elevation: 3,
   },
   welcomeLabel: { color: '#95a5a6', fontSize: 14, fontWeight: '500' },
   username: { fontSize: 22, fontWeight: '800', color: '#2c3e50', marginTop: 2 },
+
+  // Compact banners — inside ScrollView, small text, no overlap
+  offlineBanner: {
+    backgroundColor: '#fef2f2', marginHorizontal: 16, marginBottom: 8,
+    paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10,
+    borderLeftWidth: 3, borderLeftColor: '#e74c3c',
+  },
+  offlineBannerText: { fontSize: 12, fontWeight: '600', color: '#c0392b' },
+  cacheBanner: {
+    backgroundColor: '#fffbeb', marginHorizontal: 16, marginBottom: 8,
+    paddingVertical: 6, paddingHorizontal: 14, borderRadius: 10,
+    borderLeftWidth: 3, borderLeftColor: '#f39c12',
+  },
+  cacheBannerText: { fontSize: 11, fontWeight: '600', color: '#e67e22' },
 
   alertCard: {
     backgroundColor: '#fff8e1', borderRadius: 12, padding: 14,
@@ -355,26 +478,11 @@ const styles = StyleSheet.create({
   alertTitle: { fontWeight: '700', fontSize: 15, color: '#e67e22', marginBottom: 6 },
   alertText: { color: '#795548', fontSize: 13, marginBottom: 2 },
 
-  statsCard: {
-    backgroundColor: '#fff', borderRadius: 16, padding: 20,
-    marginHorizontal: 16, marginBottom: 16,
-    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 4,
-  },
-  statsTitle: { fontSize: 16, fontWeight: '700', color: '#34495e', marginBottom: 10, textAlign: 'center' },
-  adherenceRow: { alignItems: 'center', marginBottom: 12 },
-  adherenceRate: { fontSize: 36, fontWeight: '800' },
-  statsGrid: { flexDirection: 'row', justifyContent: 'space-around' },
-  statItem: { alignItems: 'center' },
-  statValue: { fontSize: 20, fontWeight: '700', color: '#2c3e50' },
-  statLabel: { fontSize: 12, color: '#95a5a6', marginTop: 2 },
-
   sectionHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 16, marginBottom: 10, marginTop: 6,
   },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: '#2c3e50' },
-  addLink: { fontSize: 14, color: '#27ae60', fontWeight: '700' },
   scanLink: { fontSize: 14, color: '#3498db', fontWeight: '600' },
 
   emptyContainer: { alignItems: 'center', paddingVertical: 40, paddingHorizontal: 16 },
@@ -388,6 +496,62 @@ const styles = StyleSheet.create({
   addMedText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 
   listContainer: { paddingHorizontal: 16 },
+
+  // Compact stats row — below schedules
+  statsCompact: {
+    marginHorizontal: 16, marginTop: 16, marginBottom: 8,
+  },
+  statsRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+  },
+  statPill: {
+    flex: 1, alignItems: 'center', backgroundColor: '#fff',
+    paddingVertical: 10, borderRadius: 12, marginHorizontal: 3,
+    elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04, shadowRadius: 2,
+  },
+  statPillValue: { fontSize: 18, fontWeight: '800', color: '#2c3e50' },
+  statPillLabel: { fontSize: 10, color: '#95a5a6', fontWeight: '600', marginTop: 2 },
+
+  fab: {
+    position: 'absolute', bottom: 90, right: 20,
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: '#3498db', alignItems: 'center', justifyContent: 'center',
+    elevation: 6,
+    shadowColor: '#3498db', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35, shadowRadius: 8,
+  },
+  fabText: { color: '#fff', fontSize: 28, fontWeight: '600', marginTop: -2 },
+
+  // B3: Bundle grouping
+  bundleSection: {
+    marginBottom: 12,
+    backgroundColor: '#f0f4ff',
+    borderRadius: 14,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+  },
+  bundleHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingBottom: 8,
+    marginBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#dbeafe',
+  },
+  bundleTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#3b82f6',
+  },
+  bundleCount: {
+    fontSize: 11,
+    color: '#93c5fd',
+    fontWeight: '600',
+  },
 });
 
 export default DashboardScreen;

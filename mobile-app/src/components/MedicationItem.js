@@ -58,7 +58,7 @@ const getTimeStatus = (scheduleTimes, frequencyType) => {
   return { isActive: false, statusText: 'All doses done for today', isAsNeeded: false };
 };
 
-const MedicationItem = ({ schedule, onTaken, onMissed, onSnooze, onPress, loggedToday }) => {
+const MedicationItem = ({ schedule, onTaken, onMissed, onSnooze, onPress, onUndo, loggedToday, snoozedToday }) => {
   const medicine = schedule?.medicine || {};
   const scheduleTimes = schedule?.scheduleTimes || [];
   const frequencyType = schedule?.frequencyType;
@@ -101,10 +101,11 @@ const MedicationItem = ({ schedule, onTaken, onMissed, onSnooze, onPress, logged
         <Text style={[
           styles.statusText, 
           loggedToday ? styles.statusDone :
+          snoozedToday ? styles.statusSnoozed :
           timeStatus.statusText.includes('Overdue') ? styles.statusOverdue :
           styles.statusUpcoming
         ]}>
-          {loggedToday ? '✅ Recorded today' : timeStatus.statusText}
+          {loggedToday ? '✅ Recorded today' : snoozedToday ? '⏰ Snoozed — will remind again' : timeStatus.statusText}
         </Text>
         
         {onPress && <Text style={styles.tapHint}>Tap for details →</Text>}
@@ -112,9 +113,16 @@ const MedicationItem = ({ schedule, onTaken, onMissed, onSnooze, onPress, logged
 
       {/* Action Buttons — always show for unlogged items */}
       <View style={styles.actions}>
-        {loggedToday ? (
-          <View style={styles.doneIndicator}>
-            <Text style={styles.doneText}>Done ✓</Text>
+        {loggedToday || snoozedToday ? (
+          <View style={styles.doneRow}>
+            <View style={styles.doneIndicator}>
+              <Text style={styles.doneText}>{snoozedToday ? 'Snoozed ⏰' : 'Done ✓'}</Text>
+            </View>
+            {onUndo && (
+              <TouchableOpacity style={styles.undoButton} onPress={onUndo}>
+                <Text style={styles.undoButtonText}>Undo</Text>
+              </TouchableOpacity>
+            )}
           </View>
         ) : timeStatus.isActive ? (
           <>
@@ -213,6 +221,9 @@ const styles = StyleSheet.create({
   statusUpcoming: {
     color: '#95a5a6',
   },
+  statusSnoozed: {
+    color: '#f39c12',
+  },
   tapHint: {
     fontSize: 11,
     color: '#bdc3c7',
@@ -221,6 +232,8 @@ const styles = StyleSheet.create({
   actions: {
     alignItems: 'center',
     gap: 6,
+    flexShrink: 0,
+    minWidth: 80,
   },
   takeButton: {
     backgroundColor: '#2ecc71',
@@ -271,6 +284,24 @@ const styles = StyleSheet.create({
     color: '#27ae60',
     fontWeight: '700',
     fontSize: 13,
+  },
+  doneRow: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 4,
+  },
+  undoButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  undoButtonText: {
+    color: '#e74c3c',
+    fontWeight: '600',
+    fontSize: 11,
   },
 });
 

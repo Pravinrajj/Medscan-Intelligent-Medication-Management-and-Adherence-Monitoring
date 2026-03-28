@@ -78,18 +78,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'flex-end',
-    height: 120,
-    paddingBottom: 4,
+    height: 150,
+    paddingBottom: 6,
   },
   barContainer: {
     alignItems: 'center',
     flex: 1,
   },
   barWrapper: {
-    height: 100,
+    height: 120,
     justifyContent: 'flex-end',
     width: '100%',
     alignItems: 'center',
+    paddingBottom: 4,
   },
   bar: {
     width: 20,
@@ -100,12 +101,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#95a5a6',
     fontWeight: '600',
-    marginTop: 6,
+    marginTop: 8,
   },
   countLabel: {
     fontSize: 10,
     color: '#bdc3c7',
-    marginTop: 2,
+    marginTop: 3,
   },
   legend: {
     flexDirection: 'row',

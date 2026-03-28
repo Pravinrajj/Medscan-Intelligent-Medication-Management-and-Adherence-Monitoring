@@ -21,8 +21,8 @@ public class GroupController {
     private GroupService groupService;
 
     @PostMapping("/create")
-    public ResponseEntity<CareGroup> createGroup(@RequestParam Long adminId, @RequestParam String groupName) {
-        return ResponseEntity.ok(groupService.createGroup(adminId, groupName));
+    public ResponseEntity<CareGroup> createGroup(@RequestParam Long adminId, @RequestParam String groupName, @RequestParam(required = false) String description) {
+        return ResponseEntity.ok(groupService.createGroup(adminId, groupName, description));
     }
 
     @PostMapping("/{groupId}/add-member")
@@ -40,7 +40,7 @@ public class GroupController {
     }
 
     @GetMapping("/user/{userId}")
-    public ResponseEntity<List<CareGroup>> getUserGroups(@PathVariable Long userId) {
+    public ResponseEntity<?> getUserGroups(@PathVariable Long userId) {
         return ResponseEntity.ok(groupService.getUserGroups(userId));
     }
 
@@ -129,7 +129,7 @@ public class GroupController {
             @RequestBody Map<String, Object> body) {
         Long triggerUserId = Long.valueOf(body.get("triggerUserId").toString());
         Long targetUserId = Long.valueOf(body.get("targetUserId").toString());
-        Long scheduleId = Long.valueOf(body.get("scheduleId").toString());
+        Long scheduleId = body.get("scheduleId") != null ? Long.valueOf(body.get("scheduleId").toString()) : null;
         groupService.triggerReminder(groupId, triggerUserId, targetUserId, scheduleId);
         return ResponseEntity.ok(Map.of("message", "Reminder sent"));
     }

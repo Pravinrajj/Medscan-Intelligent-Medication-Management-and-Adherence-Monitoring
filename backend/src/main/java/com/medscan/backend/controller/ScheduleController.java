@@ -40,6 +40,7 @@ public class ScheduleController {
         schedule.setDoseUnit(scheduleRequest.getDoseUnit());
         schedule.setCurrentStock(scheduleRequest.getCurrentStock());
         schedule.setInitialStock(scheduleRequest.getCurrentStock());
+        schedule.setBundleName(scheduleRequest.getBundleName());
 
         return ResponseEntity.ok(scheduleService.createSchedule(userId, medicineId, schedule, scheduleRequest.getTimes()));
     }
@@ -56,6 +57,7 @@ public class ScheduleController {
         updates.setFrequencyType(request.getFrequencyType());
         updates.setCustomDays(request.getCustomDays());
         updates.setEndDate(request.getEndDate());
+        updates.setBundleName(request.getBundleName());
 
         return ResponseEntity.ok(scheduleService.updateSchedule(scheduleId, updates, request.getTimes()));
     }
@@ -97,5 +99,9 @@ public class ScheduleController {
         public void setCurrentStock(Integer currentStock) { this.currentStock = currentStock; }
         public String getCustomDays() { return customDays; }
         public void setCustomDays(String customDays) { this.customDays = customDays; }
+
+        private String bundleName;
+        public String getBundleName() { return bundleName; }
+        public void setBundleName(String bundleName) { this.bundleName = bundleName; }
     }
 }

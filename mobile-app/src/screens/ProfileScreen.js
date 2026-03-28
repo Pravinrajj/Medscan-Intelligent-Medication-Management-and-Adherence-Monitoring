@@ -1,8 +1,10 @@
 import React, { useContext, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Switch } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Switch, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { AuthContext } from '../context/AuthContext';
 import api from '../api/client';
+import { cancelAllReminders } from '../services/NotificationService';
 
 const ProfileScreen = ({ navigation }) => {
   const { userInfo, logout } = useContext(AuthContext);
@@ -32,12 +34,54 @@ const ProfileScreen = ({ navigation }) => {
     loadSettings();
   }, []);
 
+  // Fetch stats
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const [statsRes, schedRes] = await Promise.all([
+          api.get(`/stats/user/${userInfo.id}`),
+          api.get(`/schedules/user/${userInfo.id}`),
+        ]);
+        setStats(statsRes.data);
+        setScheduleCount((schedRes.data || []).length);
+      } catch (e) {
+        console.log('[Profile] Stats fetch failed:', e.message);
+      } finally {
+        setStatsLoading(false);
+      }
+    };
+    if (userInfo?.id) fetchStats();
+  }, [userInfo?.id]);
+
   const handleToggleReminders = async (value) => {
     setRemindersEnabled(value);
     await AsyncStorage.setItem('global_notifications', String(value));
   };
 
   const handleToggleBiometric = async (value) => {
+    if (value) {
+      // Verify device ownership before enabling
+      try {
+        const hasHardware = await LocalAuthentication.hasHardwareAsync();
+        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+        if (!hasHardware || !isEnrolled) {
+          Alert.alert('Not Available', 'Your device does not support biometric authentication or no biometric is enrolled.');
+          return;
+        }
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: 'Confirm to enable Screen Lock',
+          fallbackLabel: 'Use Passcode',
+          disableDeviceFallback: false,
+        });
+        if (!result.success) {
+          Alert.alert('Authentication Failed', 'Screen Lock was not enabled.');
+          return;
+        }
+      } catch (e) {
+        Alert.alert('Error', 'Could not verify authentication.');
+        return;
+      }
+    }
     setBiometricEnabled(value);
     await AsyncStorage.setItem('biometric_enabled', String(value));
     if (value) {
@@ -80,7 +124,10 @@ const ProfileScreen = ({ navigation }) => {
           </Text>
         </View>
         <Text style={styles.displayName}>{userInfo?.fullName || userInfo?.username}</Text>
-        <Text style={styles.role}>{userInfo?.roles?.[0] || 'PATIENT'}</Text>
+        {/* <Text style={styles.role}>{userInfo?.roles?.[0] || 'PATIENT'}</Text> */}
+        {userInfo?.createdAt && (
+          <Text style={styles.memberSince}>Member since {new Date(userInfo.createdAt).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</Text>
+        )}
       </View>
 
       {/* Info Card */}
@@ -174,8 +221,19 @@ const ProfileScreen = ({ navigation }) => {
 
       {/* Actions Card */}
       <View style={styles.card}>
+        <Text style={styles.cardTitle}>Quick Actions</Text>
         <TouchableOpacity style={styles.actionRow} onPress={() => navigation.navigate('Report')}>
           <Text style={styles.actionText}>📊 Adherence Reports</Text>
+          <Text style={styles.actionArrow}>→</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionRow} onPress={() => navigation.getParent()?.navigate('History')}>
+          <Text style={styles.actionText}>📋 View History</Text>
+          <Text style={styles.actionArrow}>→</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.actionRow, { borderBottomWidth: 0 }]} onPress={() => {
+          Alert.alert('MedScan Help', 'MedScan helps you track medications, set reminders, and manage adherence with care groups.\n\n• Dashboard: View & log today\'s medicines\n• Groups: Share schedules with family/caregivers\n• History: Review past adherence\n• Profile: Edit info & settings\n\nNeed help? Contact: support@medscan.app');
+        }}>
+          <Text style={styles.actionText}>❓ Help & About</Text>
           <Text style={styles.actionArrow}>→</Text>
         </TouchableOpacity>
       </View>
@@ -205,6 +263,7 @@ const styles = StyleSheet.create({
   avatarText: { color: '#fff', fontSize: 32, fontWeight: '700' },
   displayName: { fontSize: 22, fontWeight: '800', color: '#2c3e50' },
   role: { fontSize: 13, color: '#7f8c8d', marginTop: 4, textTransform: 'uppercase', letterSpacing: 1 },
+  memberSince: { fontSize: 12, color: '#bdc3c7', marginTop: 4 },
 
   card: {
     backgroundColor: '#fff', borderRadius: 16, padding: 18,
@@ -244,6 +303,14 @@ const styles = StyleSheet.create({
   logoutText: { color: '#ef4444', fontWeight: '700', fontSize: 16 },
 
   version: { textAlign: 'center', color: '#bdc3c7', fontSize: 12, marginTop: 16 },
+
+  statsGrid: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
+  statBox: {
+    flex: 1, alignItems: 'center', backgroundColor: '#f8f9fa',
+    paddingVertical: 12, borderRadius: 12, marginHorizontal: 3,
+  },
+  statValue: { fontSize: 20, fontWeight: '800', color: '#2c3e50' },
+  statLabel: { fontSize: 10, color: '#95a5a6', fontWeight: '600', marginTop: 2, textTransform: 'uppercase' },
 });
 
 export default ProfileScreen;
