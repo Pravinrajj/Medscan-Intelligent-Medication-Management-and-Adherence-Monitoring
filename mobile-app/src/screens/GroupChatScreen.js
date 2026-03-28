@@ -32,7 +32,7 @@ const GroupChatScreen = ({ route, navigation }) => {
     (async () => {
       try {
         // 1. Get group members from API
-        const membersRes = await api.get(`/groups/${group.id}/members`);
+        const membersRes = await api.get(`/groups/members/${group.id}`);
         const members = membersRes.data || [];
 
         // 2. Load device contacts for phone → contact name mapping
@@ -170,7 +170,7 @@ const GroupChatScreen = ({ route, navigation }) => {
           text: 'Send',
           onPress: async () => {
             try {
-              const membersRes = await api.get(`/groups/${group.id}/members`);
+              const membersRes = await api.get(`/groups/members/${group.id}`);
               const targets = (membersRes.data || []).filter(m => m.id !== userInfo.id);
               for (const m of targets) {
                 await api.post(`/groups/${group.id}/trigger-reminder`, {
@@ -346,7 +346,7 @@ const GroupChatScreen = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#e8edf2' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#e8edf2' },
-  listContent: { paddingHorizontal: 10, paddingTop: 8, paddingBottom: 130 },
+  listContent: { paddingHorizontal: 10, paddingTop: 8, paddingBottom: 100 },
 
   // Header
   headerTouchable: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -418,7 +418,7 @@ const styles = StyleSheet.create({
 
   // FAB
   fab: {
-    position: 'absolute', bottom: 90, right: 20,
+    position: 'absolute', bottom: 75, right: 20,
     backgroundColor: '#2563eb', flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 18, paddingVertical: 12, borderRadius: 28,
     elevation: 6,

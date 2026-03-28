@@ -321,7 +321,7 @@ const GroupDetailsScreen = ({ route, navigation }) => {
           try {
             await api.delete(`/groups/${group.id}?adminId=${userInfo.id}`);
             Alert.alert('Deleted', 'Group has been deleted.');
-            navigation.goBack();
+            navigation.popToTop();
           } catch (e) {
             Alert.alert('Error', e.response?.data?.message || 'Failed to delete group.');
           }
@@ -340,7 +340,7 @@ const GroupDetailsScreen = ({ route, navigation }) => {
           try {
             await api.delete(`/groups/${group.id}/remove-member?adminId=${group?.admin?.id}&userId=${userInfo.id}`);
             Alert.alert('Left Group', 'You have left the group.');
-            navigation.goBack();
+            navigation.popToTop();
           } catch (e) {
             Alert.alert('Error', 'Failed to leave group.');
           }
