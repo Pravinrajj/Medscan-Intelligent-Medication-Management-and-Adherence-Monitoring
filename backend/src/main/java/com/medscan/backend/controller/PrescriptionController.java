@@ -131,6 +131,92 @@ public class PrescriptionController {
         }
     }
 
+    /**
+     * Strip Scan — calls mediscan-ocr strip reader for medicine name extraction from tablet strips.
+     */
+    @PostMapping("/scan-strip")
+    public ResponseEntity<?> scanStrip(
+            @RequestParam("image") MultipartFile file) {
+
+        logger.info("Strip scan request received: {}, size={}KB",
+                file.getOriginalFilename(),
+                file.getSize() / 1024);
+
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+
+            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+            body.add("file", new ByteArrayResource(file.getBytes()) {
+                @Override
+                public String getFilename() {
+                    return file.getOriginalFilename();
+                }
+            });
+
+            HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
+
+            String stripUrl = ocrServiceUrl + "/extract-medicine-name/";
+            logger.info("Calling strip reader: {}", stripUrl);
+
+            ResponseEntity<Map> ocrResponse = restTemplate.exchange(
+                    stripUrl,
+                    HttpMethod.POST,
+                    requestEntity,
+                    Map.class);
+
+            Map<String, Object> ocrResult = ocrResponse.getBody();
+
+            // Map strip response to mobile-app format
+            String medicineName = ocrResult != null ? (String) ocrResult.get("medicine_name") : null;
+            logger.info("Strip reader result: medicine_name={}", medicineName);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", medicineName != null && !medicineName.isEmpty());
+            response.put("rawText", ocrResult != null ? ocrResult.get("raw_text") : "");
+            response.put("processingTimeMs", ocrResult != null ? ocrResult.get("processing_time_ms") : null);
+
+            // Build medicines list with the single detected medicine
+            if (medicineName != null && !medicineName.isEmpty()) {
+                Map<String, Object> med = new HashMap<>();
+                med.put("name", medicineName);
+                med.put("matchScore", ocrResult.get("confidence"));
+
+                // Include DB match details if available
+                Map<String, Object> dbMatch = ocrResult.get("db_match") instanceof Map
+                        ? (Map<String, Object>) ocrResult.get("db_match") : null;
+                if (dbMatch != null) {
+                    med.put("name", dbMatch.getOrDefault("matched_name", medicineName));
+                    med.put("matchScore", dbMatch.get("match_score"));
+                    Map<String, Object> details = dbMatch.get("details") instanceof Map
+                            ? (Map<String, Object>) dbMatch.get("details") : null;
+                    if (details != null) {
+                        med.put("manufacturer", details.get("manufacturer"));
+                        med.put("composition", details.get("composition"));
+                        med.put("sideEffects", details.get("side_effects"));
+                    }
+                }
+
+                response.put("medicines", List.of(med));
+            } else {
+                response.put("medicines", List.of());
+            }
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            logger.error("Strip scan service call failed: {}", e.getMessage());
+
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("status", "error");
+            errorResponse.put("message", "OCR service unavailable. Make sure mediscan-ocr is running on port 8000.");
+            errorResponse.put("medicines", List.of());
+
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(errorResponse);
+        }
+    }
+
     @PostMapping("/user/{userId}")
     public ResponseEntity<Prescription> uploadPrescription(
             @PathVariable Long userId,

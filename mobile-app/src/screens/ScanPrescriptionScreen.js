@@ -5,11 +5,17 @@ import * as ImagePicker from 'expo-image-picker';
 import api from '../api/client';
 import { AuthContext } from '../context/AuthContext';
 
+const SCAN_MODES = [
+  { key: 'prescription', label: 'Prescription', icon: 'file-document-outline', desc: 'Handwritten or printed prescription' },
+  { key: 'strip', label: 'Medicine Strip', icon: 'pill', desc: 'Tablet blister pack / strip' },
+];
+
 const ScanPrescriptionScreen = ({ navigation }) => {
   const { userInfo } = useContext(AuthContext);
   const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
+  const [scanMode, setScanMode] = useState('prescription');
 
   const pickImage = async (useCamera) => {
     try {
@@ -63,8 +69,10 @@ const ScanPrescriptionScreen = ({ navigation }) => {
         name: 'prescription.jpg',
       });
 
-      const res = await api.post('/prescriptions/scan', formData, {
+      const endpoint = scanMode === 'strip' ? '/prescriptions/scan-strip' : '/prescriptions/scan';
+      const res = await api.post(endpoint, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 120000, // 2 min timeout for OCR processing
       });
 
       setResult(res.data);
@@ -83,7 +91,30 @@ const ScanPrescriptionScreen = ({ navigation }) => {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Scan Prescription</Text>
-      <Text style={styles.subtitle}>Take a photo or upload an image of your prescription to extract medicine details.</Text>
+      <Text style={styles.subtitle}>Take a photo or upload an image of your prescription or medicine strip to extract details.</Text>
+
+      {/* Scan Mode Toggle */}
+      <View style={styles.modeRow}>
+        {SCAN_MODES.map(mode => (
+          <TouchableOpacity
+            key={mode.key}
+            style={[styles.modeBtn, scanMode === mode.key && styles.modeBtnActive]}
+            onPress={() => { setScanMode(mode.key); setResult(null); }}
+          >
+            <MaterialCommunityIcons
+              name={mode.icon}
+              size={20}
+              color={scanMode === mode.key ? '#fff' : '#7f8c8d'}
+            />
+            <Text style={[styles.modeText, scanMode === mode.key && styles.modeTextActive]}>
+              {mode.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <Text style={styles.modeDesc}>
+        {SCAN_MODES.find(m => m.key === scanMode)?.desc}
+      </Text>
 
       {/* Image Preview */}
       <View style={styles.imageContainer}>
@@ -110,7 +141,10 @@ const ScanPrescriptionScreen = ({ navigation }) => {
       {image && (
         <TouchableOpacity style={styles.scanBtn} onPress={handleScan} disabled={loading}>
           {loading ? (
-            <ActivityIndicator color="#fff" />
+            <View style={{ alignItems: 'center' }}>
+              <ActivityIndicator color="#fff" />
+              <Text style={{ color: '#fff', fontSize: 12, marginTop: 6 }}>Processing... this may take a moment</Text>
+            </View>
           ) : (
             <Text style={styles.scanBtnText}><MaterialCommunityIcons name="magnify" size={17} color="#fff" /> Scan Now</Text>
           )}
@@ -122,14 +156,18 @@ const ScanPrescriptionScreen = ({ navigation }) => {
         <View style={styles.resultsSection}>
           <Text style={styles.resultsTitle}>Extracted Medicines</Text>
           {(result.medicines || []).length === 0 ? (
-            <Text style={styles.noResults}>No medicines detected. Try a clearer image.</Text>
+            <Text style={styles.noResults}>No medicines detected. Try a clearer image or switch scan mode.</Text>
           ) : (
             result.medicines.map((med, idx) => (
               <View key={idx} style={styles.resultCard}>
                 <View style={styles.resultInfo}>
                   <Text style={styles.resultName}>{med.name || 'Unknown'}</Text>
-                  {med.dosage && <Text style={styles.resultDosage}>Dosage: {med.dosage}</Text>}
-                  {med.frequency && <Text style={styles.resultFrequency}>Frequency: {med.frequency}</Text>}
+                  {med.manufacturer && <Text style={styles.resultDetail}>Manufacturer: {med.manufacturer}</Text>}
+                  {med.composition && <Text style={styles.resultDetail}>Composition: {med.composition}</Text>}
+                  {med.dosage && <Text style={styles.resultDetail}>Dosage: {med.dosage}</Text>}
+                  {med.matchScore != null && (
+                    <Text style={styles.resultScore}>Match: {Math.round(med.matchScore)}%</Text>
+                  )}
                 </View>
                 <TouchableOpacity style={styles.addBtn} onPress={() => handleAddMedicine(med)}>
                   <Text style={styles.addBtnText}>+ Add</Text>
@@ -156,7 +194,21 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f6f9fc' },
   content: { padding: 20 },
   title: { fontSize: 22, fontWeight: '800', color: '#2c3e50', marginBottom: 6 },
-  subtitle: { fontSize: 14, color: '#7f8c8d', marginBottom: 20, lineHeight: 20 },
+  subtitle: { fontSize: 14, color: '#7f8c8d', marginBottom: 16, lineHeight: 20 },
+
+  // Scan mode toggle
+  modeRow: { flexDirection: 'row', gap: 10, marginBottom: 6 },
+  modeBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, paddingVertical: 12, borderRadius: 12,
+    backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e0e6ed',
+  },
+  modeBtnActive: {
+    backgroundColor: '#3498db', borderColor: '#3498db',
+  },
+  modeText: { fontSize: 14, fontWeight: '600', color: '#7f8c8d' },
+  modeTextActive: { color: '#fff' },
+  modeDesc: { fontSize: 12, color: '#95a5a6', marginBottom: 16, textAlign: 'center' },
 
   imageContainer: {
     height: 250, backgroundColor: '#fff', borderRadius: 16,
@@ -198,8 +250,8 @@ const styles = StyleSheet.create({
   },
   resultInfo: { flex: 1 },
   resultName: { fontSize: 16, fontWeight: '700', color: '#2c3e50' },
-  resultDosage: { fontSize: 13, color: '#7f8c8d', marginTop: 2 },
-  resultFrequency: { fontSize: 13, color: '#7f8c8d', marginTop: 1 },
+  resultDetail: { fontSize: 13, color: '#7f8c8d', marginTop: 2 },
+  resultScore: { fontSize: 12, color: '#27ae60', fontWeight: '600', marginTop: 4 },
   addBtn: {
     backgroundColor: '#3498db', paddingVertical: 8, paddingHorizontal: 16,
     borderRadius: 8,

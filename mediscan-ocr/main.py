@@ -374,10 +374,10 @@ async def extract_medicine_name_from_strip(file: UploadFile = File(...)):
 
         # ── Step 5: Database lookup ────────────────────────────────
         db_match = None
-        if strip_result.medicine_name:
-            db_match = lookup_medicine(strip_result.medicine_name)
+        if strip_result.brand_name:
+            db_match = lookup_medicine(strip_result.brand_name)
             logger.info(
-                f"[{request_id}] DB lookup: '{strip_result.medicine_name}' → "
+                f"[{request_id}] DB lookup: '{strip_result.brand_name}' → "
                 f"'{db_match.matched_name}' (score={db_match.match_score:.1f})"
             )
 
@@ -385,7 +385,8 @@ async def extract_medicine_name_from_strip(file: UploadFile = File(...)):
         elapsed_ms = int((time.time() - start_time) * 1000)
 
         response = {
-            "medicine_name": strip_result.medicine_name,
+            "brand_name": strip_result.brand_name,
+            "composition": strip_result.composition,
             "confidence": round(strip_result.confidence, 4),
             "raw_text": strip_result.raw_text,
             "top_candidates": [
@@ -400,7 +401,7 @@ async def extract_medicine_name_from_strip(file: UploadFile = File(...)):
 
         logger.info(
             f"[{request_id}] ✅ Strip result: "
-            f"'{strip_result.medicine_name}' "
+            f"'{strip_result.brand_name}' "
             f"(conf={strip_result.confidence:.3f}, {elapsed_ms}ms)"
         )
 

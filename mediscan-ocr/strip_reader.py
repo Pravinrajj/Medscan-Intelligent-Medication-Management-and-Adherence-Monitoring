@@ -22,6 +22,7 @@ import re
 import logging
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
+from medicine_db import lookup_medicine
 
 logger = logging.getLogger("mediscan.strip_reader")
 
@@ -42,7 +43,12 @@ NOISE_KEYWORDS = {
     "composition", "each", "contains",
     "dosage", "dose", "indications",
     "schedule", "sch", "rx", "prescription",
-    "approved", "drug", "licence", "license",
+    "approved", "drug", "pharma", "pharmaceutical",
+    "pharmaceuticals", "ltd", "limited", "pvt",
+    "private", "industries", "company", "division",
+    "licence", "license", "search", "inside", "image", "amazon", "visit",
+    "fashion", "stock", "share", "save",
+    "pack", "blister",
     "price", "mrp", "incl", "gst", "rs", "inr",
     "for oral use", "for external use",
     "not for", "children", "away from",
@@ -92,18 +98,18 @@ class StripCandidate:
 
 @dataclass
 class StripResult:
-    """Result of tablet strip medicine name extraction."""
-    medicine_name: Optional[str]
+    brand_name: Optional[str]
+    composition: List[str]
     confidence: float
     all_candidates: List[StripCandidate]
     raw_text: str
 
     def to_dict(self) -> dict:
-        result = {
-            "medicine_name": self.medicine_name,
+        return {
+            "brand_name": self.brand_name,
+            "composition": self.composition,
             "confidence": round(self.confidence, 4),
         }
-        return result
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -119,6 +125,18 @@ def is_noise(text: str) -> bool:
     """
     text_lower = text.lower()
 
+    # ❌ Reject web / UI garbage
+    if any(x in text_lower for x in [
+        "google", "amazon", "search", "visit", "www", "http"
+    ]):
+        return True
+
+    # ❌ Reject storage / instructions
+    if any(x in text_lower for x in [
+        "store", "cool", "dry", "place", "keep", "away"
+    ]):
+        return True
+
     # Check for noise keywords
     for keyword in NOISE_KEYWORDS:
         if keyword in text_lower:
@@ -128,6 +146,18 @@ def is_noise(text: str) -> bool:
     stripped = re.sub(r'[^a-zA-Z]', '', text)
     if len(stripped) < 3:
         return True
+    
+    # ❌ Reject non-medical phrases (VERY IMPORTANT)
+    words = text.split()
+
+    if len(words) >= 2:
+        medical_keywords = [
+            "paracetamol", "tablet", "capsule", "mg",
+            "caffeine", "ip", "usp"
+        ]
+
+        if not any(m in text_lower for m in medical_keywords):
+            return True
 
     # Dates (dd/mm/yyyy, mm-yyyy, etc.)
     if re.search(r'\b\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{2,4}\b', text):
@@ -167,20 +197,32 @@ def score_candidate(candidate: StripCandidate, image_height: int) -> float:
 
     # ── Length Score ─────────────────────────────────────────────
     # Ideal: 8+ characters. Linear ramp from 3 to 8.
-    alpha_len = len(re.sub(r'[^a-zA-Z]', '', text))
-    if alpha_len >= 8:
-        length_score = 1.0
-    elif alpha_len >= 3:
-        length_score = (alpha_len - 3) / 5.0
+    word_count = len(text.split())
+
+    # Medicine names are usually short (1–3 words)
+    if word_count == 1:
+        length_score = 0.4   # penalize single words
+    elif word_count <= 3:
+        length_score = 1.0   # ideal brand length
+    elif word_count <= 6:
+        length_score = 0.6
     else:
-        length_score = 0.0
+        length_score = 0.2
 
     # ── Uppercase Score ─────────────────────────────────────────
     # Medicine brand names on strips are usually UPPERCASE
     alpha_chars = re.findall(r'[a-zA-Z]', text)
     if alpha_chars:
         upper_count = sum(1 for c in alpha_chars if c.isupper())
-        uppercase_score = upper_count / len(alpha_chars)
+        uppercase_ratio = upper_count / len(alpha_chars)
+
+    # Penalize full uppercase (manufacturer text)
+        if uppercase_ratio > 0.8:
+            uppercase_score = 0.3
+        elif uppercase_ratio > 0.5:
+            uppercase_score = 0.6
+        else:
+            uppercase_score = 1.0
     else:
         uppercase_score = 0.0
 
@@ -203,10 +245,10 @@ def score_candidate(candidate: StripCandidate, image_height: int) -> float:
 
     # ── Weighted combination ────────────────────────────────────
     weights = {
-        "length": 0.25,
-        "uppercase": 0.30,
-        "position": 0.25,
-        "confidence": 0.20,
+    "length": 0.35,
+    "uppercase": 0.15,
+    "position": 0.25,
+    "confidence": 0.25,
     }
 
     total = (
@@ -309,29 +351,63 @@ def extract_medicine_name(detections: list, image_height: int) -> StripResult:
 
     # ── Step 1: Build candidates ──────────────────────────────
     candidates = []
+
     for det in detections:
-        # Compute y_center
+        # ✅ Step 1: Compute y_center FIRST
         y_center = 0.0
         if det.bbox and len(det.bbox) >= 4:
             y_vals = [p[1] for p in det.bbox]
             y_center = sum(y_vals) / len(y_vals)
 
-        candidates.append(StripCandidate(
-            text=det.text.strip(),
-            confidence=det.confidence,
-            bbox=det.bbox,
-            y_center=y_center,
-        ))
+        det_text = det.text.strip()
+        if not det_text:
+            continue
+
+        # ✅ Step 2: Split composition text safely
+        parts = re.split(r',| and ', det_text)
+
+        for part in parts:
+            part = part.strip()
+
+            if len(part) < 3:
+                continue
+
+            # ✅ NEW: split further into individual words
+            # Keep full phrase instead of breaking into words
+            clean_part = part.strip()
+
+            if len(clean_part) < 4:
+                continue
+
+            candidates.append(StripCandidate(
+                text=clean_part,
+                confidence=det.confidence,
+                bbox=det.bbox,
+                y_center=y_center,
+            ))
 
     logger.info(f"Strip reader: {len(candidates)} raw candidates from OCR")
 
     # ── Step 2: Filter noise ──────────────────────────────────
     filtered = []
     for c in candidates:
+        text_lower = c.text.lower()
+
         if is_noise(c.text):
-            logger.debug(f"  Noise filtered: '{c.text}'")
-        else:
-            filtered.append(c)
+            continue
+
+        #  Reject manufacturer/company names
+        if any(word in text_lower for word in [
+            "pharma", "pharmaceutical", "ltd", "limited",
+            "industries", "pvt", "private", "division", "manufactured"
+        ]):
+            continue
+
+        #  Reject very long sentences
+        if len(c.text.split()) > 6:
+            continue
+
+        filtered.append(c)
 
     logger.info(
         f"After noise filter: {len(filtered)}/{len(candidates)} candidates remain"
@@ -348,8 +424,65 @@ def extract_medicine_name(detections: list, image_height: int) -> StripResult:
     for c in filtered:
         score_candidate(c, image_height)
 
-    # ── Step 4: Rank by score (descending) ────────────────────
-    filtered.sort(key=lambda c: c.score, reverse=True)
+    # ── STEP A: Identify composition using DB ─────────────────
+
+    composition = []
+
+    for c in filtered:
+        match = lookup_medicine(c.text, threshold=60.0)
+
+        if match.match_score >= 70:
+            name = match.matched_name
+
+            # ❌ Reject generic dosage/form words
+            if any(word in c.text.lower() for word in ["tablet", "tablets", "capsule", "dose"]):
+                continue
+
+            # ❌ Reject non-salt matches (cream, lotion, etc.)
+            if match.details:
+                salt = match.details.get("salt_composition", "")
+                if not salt:
+                    continue
+
+            if name and name.lower() not in [m.lower() for m in composition]:
+                composition.append(name)
+
+    # ── STEP B: Identify brand (fallback logic) ───────────────
+
+    brand_candidates = []
+
+    for c in filtered:
+        text_lower = c.text.lower()
+
+        # Skip composition words
+        if any(comp.lower().split()[0] in text_lower for comp in composition):
+            continue
+
+        # Skip noise
+        if is_noise(c.text):
+            continue
+
+        word_count = len(c.text.split())
+
+        # ❌ reject instruction-like phrases
+        if any(x in text_lower for x in [
+            "tablet", "tablets", "twice", "day", "dose"
+        ]):
+            continue
+
+        # ✅ allow only clean alphabetic short names
+        if 1 <= word_count <= 2 and re.match(r'^[A-Za-z\s]+$', c.text):
+            brand_candidates.append(c)
+
+    # Score brand candidates separately
+    for c in brand_candidates:
+        score_candidate(c, image_height)
+
+    brand_candidates.sort(key=lambda c: c.score, reverse=True)
+
+    brand_name = None
+    if brand_candidates:
+        brand_name = post_process_name(brand_candidates[0].text)
 
     for i, c in enumerate(filtered[:5]):
         logger.info(
@@ -361,16 +494,36 @@ def extract_medicine_name(detections: list, image_height: int) -> StripResult:
             f"conf={c.score_breakdown['confidence']:.2f})"
         )
 
-    # ── Step 5: Select top and post-process ───────────────────
-    best = filtered[0]
-    medicine_name = post_process_name(best.text)
-    confidence = best.confidence
 
     logger.info(f"Selected: '{best.text}' → '{medicine_name}' (conf={confidence:.3f})")
 
+    # ── FINAL DECISION LOGIC ─────────────────────────────
+
+    # 1. If we found composition → trust that
+    if composition:
+        return StripResult(
+            brand_name=brand_name,
+            composition=composition,
+            confidence=0.9,
+            all_candidates=filtered,
+            raw_text=raw_text,
+        )
+
+    # 2. Else fallback to best brand candidate
+    if brand_candidates:
+        return StripResult(
+            brand_name=brand_name,
+            composition=[],
+            confidence=brand_candidates[0].confidence,
+            all_candidates=filtered,
+            raw_text=raw_text,
+        )
+
+    # 3. Else nothing useful
     return StripResult(
-        medicine_name=medicine_name,
-        confidence=confidence,
+        brand_name=None,
+        composition=[],
+        confidence=0.0,
         all_candidates=filtered,
         raw_text=raw_text,
     )
