@@ -1,11 +1,12 @@
 import React, { useContext, useState, useCallback } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import api from '../api/client';
 import { AuthContext } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
 
 const STATUS_COLORS = { TAKEN: '#27ae60', MISSED: '#e74c3c', SNOOZED: '#f39c12' };
-const STATUS_ICONS = { TAKEN: '✅', MISSED: '❌', SNOOZED: '⏰' };
+const STATUS_ICONS = { TAKEN: 'check-circle', MISSED: 'close-circle', SNOOZED: 'clock-outline' };
 const FILTER_OPTIONS = ['All', 'TAKEN', 'MISSED', 'SNOOZED'];
 
 const HistoryScreen = () => {
@@ -58,7 +59,7 @@ const HistoryScreen = () => {
   const renderItem = (item) => {
     const time = new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const statusColor = STATUS_COLORS[item.status] || '#999';
-    const icon = STATUS_ICONS[item.status] || '📋';
+    const iconName = STATUS_ICONS[item.status] || 'clipboard-text-outline';
     const verb = item.status === 'TAKEN' ? 'took' : item.status === 'MISSED' ? 'missed' : 'snoozed';
 
     return (
@@ -66,7 +67,7 @@ const HistoryScreen = () => {
         <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
         <View style={styles.messageBubble}>
           <Text style={styles.messageText}>
-            {icon} You {verb} <Text style={styles.medicineName}>{item.medicineName || 'medication'}</Text>
+            <MaterialCommunityIcons name={iconName} size={14} color={statusColor} /> You {verb} <Text style={styles.medicineName}>{item.medicineName || 'medication'}</Text>
           </Text>
           <Text style={styles.messageTime}>{time}</Text>
           {item.reason && <Text style={styles.messageReason}>{item.reason}</Text>}
@@ -82,7 +83,7 @@ const HistoryScreen = () => {
   if (error && history.length === 0) {
     return (
       <View style={styles.centered}>
-        <Text style={{fontSize: 40, marginBottom: 10}}>😵</Text>
+        <MaterialCommunityIcons name="alert-circle-outline" size={40} color="#7f8c8d" style={{marginBottom: 10}} />
         <Text style={{fontSize: 16, fontWeight: '600', color: '#2c3e50', marginBottom: 6}}>Failed to Load History</Text>
         <Text style={{color: '#7f8c8d', marginBottom: 16}}>Check your connection and try again.</Text>
         <TouchableOpacity style={{backgroundColor: '#3498db', paddingVertical: 10, paddingHorizontal: 24, borderRadius: 8}} onPress={fetchHistory}>

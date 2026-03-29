@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import api from '../api/client';
 
 const RegisterScreen = ({ navigation }) => {
@@ -52,7 +53,7 @@ const RegisterScreen = ({ navigation }) => {
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.topSection}>
-          <Text style={styles.logo}>💊</Text>
+          <MaterialCommunityIcons name="pill" size={40} color="#fff" />
           <Text style={styles.appName}>MedScan</Text>
         </View>
 

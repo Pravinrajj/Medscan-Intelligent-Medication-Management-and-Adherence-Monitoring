@@ -1,5 +1,6 @@
 import React, { useContext, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, RefreshControl } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import api from '../api/client';
 import { AuthContext } from '../context/AuthContext';
 
@@ -50,12 +51,12 @@ const ReportScreen = () => {
     return '#e74c3c';
   };
 
-  const getScoreEmoji = (rate) => {
-    if (rate >= 90) return '🏆';
-    if (rate >= 80) return '🌟';
-    if (rate >= 60) return '👍';
-    if (rate >= 40) return '⚠️';
-    return '🔴';
+  const getScoreIcon = (rate) => {
+    if (rate >= 90) return { name: 'trophy', color: '#f1c40f' };
+    if (rate >= 80) return { name: 'star', color: '#f39c12' };
+    if (rate >= 60) return { name: 'thumb-up', color: '#27ae60' };
+    if (rate >= 40) return { name: 'alert-outline', color: '#f39c12' };
+    return { name: 'alert-circle', color: '#e74c3c' };
   };
 
   if (loading) {
@@ -96,7 +97,7 @@ const ReportScreen = () => {
         <>
           {/* Overall Score */}
           <View style={styles.scoreCard}>
-            <Text style={styles.scoreEmoji}>{getScoreEmoji(report.overallAdherenceRate)}</Text>
+            <MaterialCommunityIcons name={getScoreIcon(report.overallAdherenceRate).name} size={36} color={getScoreIcon(report.overallAdherenceRate).color} style={{marginBottom: 4}} />
             <Text style={[styles.scoreValue, { color: getScoreColor(report.overallAdherenceRate) }]}>
               {report.overallAdherenceRate}%
             </Text>
@@ -134,9 +135,9 @@ const ReportScreen = () => {
                 <View style={[styles.medBarFill, { width: `${med.adherenceRate}%`, backgroundColor: getScoreColor(med.adherenceRate) }]} />
               </View>
               <View style={styles.medStats}>
-                <Text style={styles.medStat}>✅ {med.taken} taken</Text>
-                <Text style={styles.medStat}>❌ {med.missed} missed</Text>
-                <Text style={styles.medStat}>⏰ {med.snoozed} snoozed</Text>
+                <Text style={styles.medStat}><MaterialCommunityIcons name="check-circle" size={12} color="#27ae60" /> {med.taken} taken</Text>
+                <Text style={styles.medStat}><MaterialCommunityIcons name="close-circle" size={12} color="#e74c3c" /> {med.missed} missed</Text>
+                <Text style={styles.medStat}><MaterialCommunityIcons name="clock-outline" size={12} color="#f39c12" /> {med.snoozed} snoozed</Text>
               </View>
             </View>
           ))}

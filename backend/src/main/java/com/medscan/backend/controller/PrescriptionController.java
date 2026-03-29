@@ -37,8 +37,8 @@ public class PrescriptionController {
     @Autowired
     private MedicineService medicineService;
 
-    @Value("${ml.service.url:http://localhost:8000}")
-    private String mlServiceUrl;
+    @Value("${ocr.service.url:http://localhost:8000}")
+    private String ocrServiceUrl;
 
     private final RestTemplate restTemplate = new RestTemplate();
 
@@ -60,7 +60,7 @@ public class PrescriptionController {
                 file.getSize() / 1024);
 
         try {
-            // Build multipart request to ML service
+            // Build multipart request to mediscan-ocr service
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.MULTIPART_FORM_DATA);
 
@@ -74,38 +74,57 @@ public class PrescriptionController {
 
             HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
 
-            // Call ML service
-            String scanUrl = mlServiceUrl + "/ocr/scan";
-            logger.info("Calling ML service: {}", scanUrl);
+            // Call mediscan-ocr service
+            String scanUrl = ocrServiceUrl + "/extract-text/";
+            logger.info("Calling OCR service: {}", scanUrl);
 
-            ResponseEntity<Map> mlResponse = restTemplate.exchange(
+            ResponseEntity<Map> ocrResponse = restTemplate.exchange(
                     scanUrl,
                     HttpMethod.POST,
                     requestEntity,
                     Map.class);
 
-            Map<String, Object> mlResult = mlResponse.getBody();
-            logger.info("ML service response: status={}, medicines={}",
-                    mlResult != null ? mlResult.get("status") : "null",
-                    mlResult != null && mlResult.get("medicines") != null
-                            ? ((List<?>) mlResult.get("medicines")).size()
-                            : 0);
+            Map<String, Object> ocrResult = ocrResponse.getBody();
+            List<Map<String, Object>> rawMedicines = ocrResult != null && ocrResult.get("medicines") != null
+                    ? (List<Map<String, Object>>) ocrResult.get("medicines")
+                    : List.of();
 
-            // Wrap ML response with success flag for mobile app compatibility
+            logger.info("OCR service response: {} medicines found", rawMedicines.size());
+
+            // Map mediscan-ocr response to mobile-app expected format
+            List<Map<String, Object>> mappedMedicines = new java.util.ArrayList<>();
+            for (Map<String, Object> med : rawMedicines) {
+                Map<String, Object> mapped = new HashMap<>();
+                mapped.put("name", med.getOrDefault("matched_name",
+                        med.getOrDefault("extracted_text", "Unknown")));
+                mapped.put("matchScore", med.get("match_score"));
+                // Extract dosage/frequency from details if available
+                Map<String, Object> details = med.get("details") instanceof Map
+                        ? (Map<String, Object>) med.get("details") : null;
+                if (details != null) {
+                    mapped.put("manufacturer", details.get("manufacturer"));
+                    mapped.put("composition", details.get("composition"));
+                    mapped.put("sideEffects", details.get("side_effects"));
+                }
+                mappedMedicines.add(mapped);
+            }
+
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.putAll(mlResult != null ? mlResult : new HashMap<>());
+            response.put("medicines", mappedMedicines);
+            response.put("rawText", ocrResult != null ? ocrResult.get("raw_text") : "");
+            response.put("confidence", ocrResult != null ? ocrResult.get("confidence") : null);
+            response.put("processingTimeMs", ocrResult != null ? ocrResult.get("processing_time_ms") : null);
 
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
-            logger.error("ML service call failed: {}", e.getMessage());
+            logger.error("OCR service call failed: {}", e.getMessage());
 
-            // Return error response
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
             errorResponse.put("status", "error");
-            errorResponse.put("message", "ML service unavailable — please try again later. (" + e.getMessage() + ")");
+            errorResponse.put("message", "OCR service unavailable. Make sure mediscan-ocr is running on port 8000.");
             errorResponse.put("medicines", List.of());
 
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(errorResponse);

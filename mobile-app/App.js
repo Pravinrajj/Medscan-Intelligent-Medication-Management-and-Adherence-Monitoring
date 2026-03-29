@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { AuthContext, AuthProvider } from './src/context/AuthContext';
 import { View, ActivityIndicator, Text } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import offlineSyncService from './src/services/OfflineSyncService';
 import { setupNotificationActions, addNotificationActionListener } from './src/services/NotificationService';
 import BiometricGate from './src/components/BiometricGate';
@@ -31,10 +32,10 @@ const Tab = createBottomTabNavigator();
 
 // Tab icon helper
 const TabIcon = ({ label, focused }) => {
-  const icons = { Home: '🏠', History: '📋', Groups: '👥', Profile: '👤' };
+  const icons = { Home: 'home', History: 'clipboard-text', Groups: 'account-group', Profile: 'account' };
   return (
     <View style={{ alignItems: 'center' }}>
-      <Text style={{ fontSize: 20 }}>{icons[label] || '•'}</Text>
+      <MaterialCommunityIcons name={icons[label] || 'circle'} size={24} color={focused ? '#3498db' : '#95a5a6'} />
       <Text style={{ fontSize: 10, fontWeight: focused ? '700' : '500', color: focused ? '#3498db' : '#95a5a6', marginTop: 2 }}>{label}</Text>
     </View>
   );

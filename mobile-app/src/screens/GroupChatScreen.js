@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, FlatList,
   ActivityIndicator, RefreshControl, Alert
 } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Contacts from 'expo-contacts';
 import { useFocusEffect } from '@react-navigation/native';
 import api from '../api/client';
@@ -151,18 +152,18 @@ const GroupChatScreen = ({ route, navigation }) => {
   // Event type → styling
   const getEventStyle = (type) => {
     switch (type) {
-      case 'TAKEN':         return { icon: '💊', accent: '#059669' };
-      case 'MISSED':        return { icon: '⚠️', accent: '#dc2626' };
-      case 'SNOOZED':       return { icon: '⏰', accent: '#d97706' };
-      case 'REMINDER_SENT': return { icon: '🔔', accent: '#2563eb' };
-      case 'UNDO':          return { icon: '↩️', accent: '#6b7280' };
-      default:              return { icon: '📋', accent: '#6b7280' };
+      case 'TAKEN':         return { icon: 'pill', accent: '#059669' };
+      case 'MISSED':        return { icon: 'alert-outline', accent: '#dc2626' };
+      case 'SNOOZED':       return { icon: 'clock-outline', accent: '#d97706' };
+      case 'REMINDER_SENT': return { icon: 'bell-ring-outline', accent: '#2563eb' };
+      case 'UNDO':          return { icon: 'undo', accent: '#6b7280' };
+      default:              return { icon: 'clipboard-text-outline', accent: '#6b7280' };
     }
   };
 
   const handleSendReminder = () => {
     Alert.alert(
-      '🔔 Send Reminder',
+      'Send Reminder',
       'Notify all members who haven\'t updated their medicines today.',
       [
         { text: 'Cancel', style: 'cancel' },
@@ -179,7 +180,7 @@ const GroupChatScreen = ({ route, navigation }) => {
                   scheduleId: null,
                 });
               }
-              Alert.alert('✅ Sent', `Reminders sent to ${targets.length} member(s).`);
+              Alert.alert('Sent', `Reminders sent to ${targets.length} member(s).`);
               fetchActivity();
             } catch (e) {
               Alert.alert('Error', 'Failed to send reminders.');
@@ -253,7 +254,7 @@ const GroupChatScreen = ({ route, navigation }) => {
 
             {/* Message with event icon */}
             <Text style={styles.bubbleMessage}>
-              {ev.icon}  {cleanMessage || item.message}
+              <MaterialCommunityIcons name={ev.icon} size={14} color={ev.accent} />  {cleanMessage || item.message}
             </Text>
 
             {/* Time — bottom right */}
@@ -282,7 +283,7 @@ const GroupChatScreen = ({ route, navigation }) => {
           style={styles.headerTouchable}
         >
           <View style={styles.headerAvatar}>
-            <Text style={{ fontSize: 16 }}>👥</Text>
+            <MaterialCommunityIcons name="account-group" size={16} color="#3498db" />
           </View>
           <View>
             <Text style={styles.headerTitle}>{groupName}</Text>
@@ -323,7 +324,7 @@ const GroupChatScreen = ({ route, navigation }) => {
         }}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={{ fontSize: 48, marginBottom: 12 }}>📋</Text>
+            <MaterialCommunityIcons name="clipboard-text-outline" size={48} color="#94a3b8" style={{marginBottom: 12}} />
             <Text style={styles.emptyTitle}>No activity yet</Text>
             <Text style={styles.emptyDesc}>
               Medicine sharing, dose tracking, and reminders will appear here
@@ -335,7 +336,7 @@ const GroupChatScreen = ({ route, navigation }) => {
       {/* FAB — Send Reminder (admin always, members if allowed) */}
       {(isAdmin || allowTriggers) && (
         <TouchableOpacity style={styles.fab} onPress={handleSendReminder} activeOpacity={0.8}>
-          <Text style={styles.fabIcon}>🔔</Text>
+          <MaterialCommunityIcons name="bell-ring" size={18} color="#fff" />
           <Text style={styles.fabLabel}>Remind</Text>
         </TouchableOpacity>
       )}

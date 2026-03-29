@@ -1,15 +1,16 @@
 import React, { useState, useContext, useEffect, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, ActivityIndicator, Modal, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import api from '../api/client';
 import { AuthContext } from '../context/AuthContext';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 // Multiple common options per type + "Other…" free-text
 const TYPE_UNITS = {
-  TABLET: { options: ['Tablet(s)', 'Capsule(s)', 'Lozenge(s)'], icon: '💊' },
-  SYRUP: { options: ['mL', 'Teaspoon(s)', 'Tablespoon(s)'], icon: '🧴' },
-  INJECTION: { options: ['mL', 'Unit(s)'], icon: '💉' },
-  OTHER: { options: ['Dose(s)', 'Drop(s)', 'Puff(s)', 'Patch(es)'], icon: '💠' },
+  TABLET: { options: ['Tablet(s)', 'Capsule(s)', 'Lozenge(s)'], icon: 'pill' },
+  SYRUP: { options: ['mL', 'Teaspoon(s)', 'Tablespoon(s)'], icon: 'bottle-tonic' },
+  INJECTION: { options: ['mL', 'Unit(s)'], icon: 'needle' },
+  OTHER: { options: ['Dose(s)', 'Drop(s)', 'Puff(s)', 'Patch(es)'], icon: 'help-circle' },
 };
 
 const TYPES = Object.keys(TYPE_UNITS);
@@ -272,7 +273,7 @@ const AddMedicineScreen = ({ navigation, route }) => {
         {/* Admin creating for member banner */}
         {targetUserName && (
           <View style={styles.adminBanner}>
-            <Text style={styles.adminBannerText}>📋 Adding medicine for {targetUserName}</Text>
+            <Text style={styles.adminBannerText}><MaterialCommunityIcons name="clipboard-text-outline" size={14} color="#d97706" /> Adding medicine for {targetUserName}</Text>
           </View>
         )}
 
@@ -308,7 +309,7 @@ const AddMedicineScreen = ({ navigation, route }) => {
         </View>
         {searchError && !searchLoading && (
           <Text style={{ color: '#e74c3c', fontSize: 12, marginTop: 4, marginLeft: 4 }}>
-            ⚠️ Search unavailable — type the name manually
+            <MaterialCommunityIcons name="alert-circle-outline" size={12} color="#e74c3c" /> Search unavailable — type the name manually
           </Text>
         )}
 
@@ -322,7 +323,7 @@ const AddMedicineScreen = ({ navigation, route }) => {
               onPress={() => handleTypeChange(t)}
             >
               <Text style={[styles.chipText, type === t && styles.chipTextActive]}>
-                {TYPE_UNITS[t].icon} {t.charAt(0) + t.slice(1).toLowerCase()}
+                <MaterialCommunityIcons name={TYPE_UNITS[t].icon} size={13} color={type === t ? '#fff' : '#7f8c8d'} /> {t.charAt(0) + t.slice(1).toLowerCase()}
               </Text>
             </TouchableOpacity>
           ))}
@@ -418,7 +419,7 @@ const AddMedicineScreen = ({ navigation, route }) => {
         {/* As Needed info */}
         {isAsNeeded && (
           <View style={styles.infoCard}>
-            <Text style={styles.infoText}>ℹ️ No scheduled reminders — take this medicine whenever you need it. Stock tracking will still work.</Text>
+            <Text style={styles.infoText}><MaterialCommunityIcons name="information" size={14} color="#3498db" /> No scheduled reminders — take this medicine whenever you need it. Stock tracking will still work.</Text>
           </View>
         )}
 
@@ -429,11 +430,11 @@ const AddMedicineScreen = ({ navigation, route }) => {
             {times.map((t, idx) => (
               <View key={idx} style={styles.timeRow}>
                 <TouchableOpacity style={styles.timeButton} onPress={() => showTimepicker(idx)}>
-                  <Text style={styles.timeButtonText}>⏰ {formatTime(t)}</Text>
+                  <Text style={styles.timeButtonText}><MaterialCommunityIcons name="clock-outline" size={16} color="#2c3e50" /> {formatTime(t)}</Text>
                 </TouchableOpacity>
                 {times.length > 1 && (
                   <TouchableOpacity style={styles.removeTimeBtn} onPress={() => removeTime(idx)}>
-                    <Text style={styles.removeTimeBtnText}>✗</Text>
+                    <Text style={styles.removeTimeBtnText}><MaterialCommunityIcons name="close" size={16} color="#e74c3c" /></Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -494,7 +495,7 @@ const AddMedicineScreen = ({ navigation, route }) => {
                       style={styles.bundleChip}
                       onPress={() => setBundleName(b)}
                     >
-                      <Text style={styles.bundleChipIcon}>📦</Text>
+                      <Text style={styles.bundleChipIcon}><MaterialCommunityIcons name="package-variant" size={14} color="#95a5a6" /></Text>
                       <Text style={styles.bundleChipText}>{b}</Text>
                     </TouchableOpacity>
                   ))}
@@ -516,7 +517,7 @@ const AddMedicineScreen = ({ navigation, route }) => {
           {saving ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.saveBtnText}>💾 Add Medicine</Text>
+            <Text style={styles.saveBtnText}><MaterialCommunityIcons name="content-save-outline" size={17} color="#fff" /> Add Medicine</Text>
           )}
         </TouchableOpacity>
       </ScrollView>

@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, FlatList,
   ActivityIndicator, RefreshControl, Alert
 } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import api from '../api/client';
 import { AuthContext } from '../context/AuthContext';
@@ -117,12 +118,12 @@ const MemberActivityScreen = ({ route, navigation }) => {
 
   const getEventStyle = (type) => {
     switch (type) {
-      case 'TAKEN': return { icon: '✓', color: '#27ae60', bg: '#e8f8f0' };
-      case 'MISSED': return { icon: '✗', color: '#e74c3c', bg: '#fef2f2' };
-      case 'SNOOZED': return { icon: '⏰', color: '#f39c12', bg: '#fef9e7' };
-      case 'REMINDER_SENT': return { icon: '🔔', color: '#3498db', bg: '#eef6fc' };
-      case 'UNDO': return { icon: '↩', color: '#95a5a6', bg: '#f4f6f7' };
-      default: return { icon: '•', color: '#7f8c8d', bg: '#f8f9fa' };
+      case 'TAKEN': return { iconName: 'check', color: '#27ae60', bg: '#e8f8f0' };
+      case 'MISSED': return { iconName: 'close', color: '#e74c3c', bg: '#fef2f2' };
+      case 'SNOOZED': return { iconName: 'clock-outline', color: '#f39c12', bg: '#fef9e7' };
+      case 'REMINDER_SENT': return { iconName: 'bell-ring-outline', color: '#3498db', bg: '#eef6fc' };
+      case 'UNDO': return { iconName: 'undo', color: '#95a5a6', bg: '#f4f6f7' };
+      default: return { iconName: 'circle-small', color: '#7f8c8d', bg: '#f8f9fa' };
     }
   };
 
@@ -141,7 +142,7 @@ const MemberActivityScreen = ({ route, navigation }) => {
           </View>
         )}
         <View style={[styles.activityCard, { backgroundColor: evStyle.bg, borderLeftColor: evStyle.color }]}>
-          <Text style={[styles.activityIcon, { color: evStyle.color }]}>{evStyle.icon}</Text>
+          <MaterialCommunityIcons name={evStyle.iconName} size={18} color={evStyle.color} style={{marginRight: 10}} />
           <View style={{ flex: 1 }}>
             <Text style={styles.activityMsg}>{item.message}</Text>
             <Text style={styles.activityTime}>{getTimeLabel(item.timestamp)}</Text>
@@ -182,12 +183,12 @@ const MemberActivityScreen = ({ route, navigation }) => {
               targetUserName: memberName,
             })}
           >
-            <Text style={styles.actionBtnIcon}>📋</Text>
+            <MaterialCommunityIcons name="clipboard-text-outline" size={20} color="#3498db" />
             <Text style={styles.actionBtnLabel}>Add Medicine</Text>
           </TouchableOpacity>
         )}
         <TouchableOpacity style={[styles.actionBtn, { borderColor: '#27ae60' }]} onPress={handleSendReminder}>
-          <Text style={styles.actionBtnIcon}>🔔</Text>
+          <MaterialCommunityIcons name="bell-ring-outline" size={20} color="#27ae60" />
           <Text style={[styles.actionBtnLabel, { color: '#27ae60' }]}>Send Reminder</Text>
         </TouchableOpacity>
         {isAdmin && (
@@ -208,7 +209,7 @@ const MemberActivityScreen = ({ route, navigation }) => {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListEmptyComponent={
           <View style={styles.emptyBox}>
-            <Text style={{ fontSize: 36, marginBottom: 8 }}>📭</Text>
+            <MaterialCommunityIcons name="clipboard-text-outline" size={36} color="#94a3b8" style={{ marginBottom: 8 }} />
             <Text style={styles.emptyText}>No activity from {memberName} yet</Text>
           </View>
         }

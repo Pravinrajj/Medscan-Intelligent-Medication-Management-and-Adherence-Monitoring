@@ -1,5 +1,6 @@
 import React, { useContext, useState, useCallback } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import api from '../api/client';
 import { AuthContext } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
@@ -58,7 +59,7 @@ const GroupScreen = ({ navigation }) => {
       activeOpacity={0.7}
     >
       <View style={styles.groupIcon}>
-        <Text style={styles.groupIconText}>👥</Text>
+        <MaterialCommunityIcons name="account-group" size={22} color="#3498db" />
       </View>
       <View style={styles.groupInfo}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -90,7 +91,7 @@ const GroupScreen = ({ navigation }) => {
   if (error && groups.length === 0) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={{fontSize: 40, marginBottom: 10}}>😵</Text>
+        <MaterialCommunityIcons name="alert-circle-outline" size={40} color="#7f8c8d" style={{marginBottom: 10}} />
         <Text style={{fontSize: 16, fontWeight: '600', color: '#2c3e50', marginBottom: 6}}>Failed to Load Groups</Text>
         <Text style={{color: '#7f8c8d', marginBottom: 16}}>Check your connection and try again.</Text>
         <TouchableOpacity style={{backgroundColor: '#3498db', paddingVertical: 10, paddingHorizontal: 24, borderRadius: 8}} onPress={fetchGroups}>
@@ -116,7 +117,7 @@ const GroupScreen = ({ navigation }) => {
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyIcon}>👥</Text>
+              <MaterialCommunityIcons name="account-group-outline" size={48} color="#bdc3c7" style={{marginBottom: 12}} />
               <Text style={styles.emptyText}>No groups yet</Text>
               <Text style={styles.emptySubtext}>Create a care group to share medication updates with family</Text>
             </View>

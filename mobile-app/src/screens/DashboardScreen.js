@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useContext, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import api from '../api/client';
@@ -198,7 +199,7 @@ const DashboardScreen = ({ navigation }) => {
       if (result.data?.metadata === 'ALREADY_LOGGED') {
         Alert.alert("Already Recorded", "This dose was already logged today.");
       } else {
-        Alert.alert("Snoozed ⏰", "We'll remind you again later.");
+        Alert.alert("Snoozed", "We'll remind you again later.");
       }
       setSnoozedSchedules(prev => new Set([...prev, scheduleId]));
       fetchData();
@@ -248,7 +249,7 @@ const DashboardScreen = ({ navigation }) => {
   if (error && schedules.length === 0) {
     return (
       <View style={styles.centered}>
-        <Text style={{fontSize: 40, marginBottom: 10}}>📡</Text>
+        <Text style={{fontSize: 40, marginBottom: 10}}><MaterialCommunityIcons name="access-point-network" size={40} color="#7f8c8d" /></Text>
         <Text style={{fontSize: 16, fontWeight: '600', color: '#2c3e50', marginBottom: 6}}>Could Not Load Data</Text>
         <Text style={{color: '#7f8c8d', marginBottom: 16, textAlign: 'center'}}>Check your internet connection and make sure the server is running.</Text>
         <TouchableOpacity style={{backgroundColor: '#4a90e2', paddingVertical: 10, paddingHorizontal: 24, borderRadius: 8}} onPress={fetchData}>
@@ -282,19 +283,19 @@ const DashboardScreen = ({ navigation }) => {
         {/* Offline / Cache banners — compact, non-overlapping */}
         {!isOnline && (
           <View style={styles.offlineBanner}>
-            <Text style={styles.offlineBannerText}>📡 Offline — actions saved locally</Text>
+            <Text style={styles.offlineBannerText}><MaterialCommunityIcons name="access-point-network-off" size={13} color="#c0392b" /> Offline — actions saved locally</Text>
           </View>
         )}
         {isFromCache && cachedAt && (
           <View style={styles.cacheBanner}>
-            <Text style={styles.cacheBannerText}>📦 Cached data — {formatCacheAge(cachedAt)}</Text>
+            <Text style={styles.cacheBannerText}><MaterialCommunityIcons name="package-variant" size={12} color="#e67e22" /> Cached data — {formatCacheAge(cachedAt)}</Text>
           </View>
         )}
 
         {/* Low Stock Alert */}
         {lowStockItems.length > 0 && (
             <View style={styles.alertCard}>
-                <Text style={styles.alertTitle}>⚠️ Restock Needed</Text>
+                <Text style={styles.alertTitle}><MaterialCommunityIcons name="alert-outline" size={16} color="#e67e22" /> Restock Needed</Text>
                 {lowStockItems.map(item => (
                     <Text key={item.id} style={styles.alertText}>
                         • {item.medicine ? item.medicine.name : 'Medication'} is running low ({item.currentStock} left)
@@ -336,13 +337,13 @@ const DashboardScreen = ({ navigation }) => {
         <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Today's Schedule</Text>
             <TouchableOpacity onPress={() => navigation.navigate('ScanPrescription')}>
-                <Text style={styles.scanLink}>📷 Scan</Text>
+                <Text style={styles.scanLink}><MaterialCommunityIcons name="camera-outline" size={14} color="#3498db" /> Scan</Text>
             </TouchableOpacity>
         </View>
         
         {schedules.length === 0 ? (
            <View style={styles.emptyContainer}>
-               <Text style={styles.emptyIcon}>💊</Text>
+               <MaterialCommunityIcons name="pill" size={48} color="#95a5a6" style={{marginBottom: 12}} />
                <Text style={styles.emptyText}>No medications scheduled yet</Text>
                <Text style={styles.emptySubtext}>Add your first medicine to start tracking</Text>
                <TouchableOpacity style={styles.addMedBtn} onPress={() => navigation.navigate('AddMedicine')}>
@@ -381,7 +382,7 @@ const DashboardScreen = ({ navigation }) => {
                         setSchedules([...schedules]);
                       }}
                     >
-                      <Text style={styles.bundleTitle}>📦 {bName}</Text>
+                      <Text style={styles.bundleTitle}><MaterialCommunityIcons name="package-variant" size={14} color="#3b82f6" /> {bName}</Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                         <Text style={[
                           styles.bundleCount,

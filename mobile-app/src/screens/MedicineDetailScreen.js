@@ -1,5 +1,6 @@
 import React, { useState, useContext, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert, RefreshControl } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import api from '../api/client';
 import { AuthContext } from '../context/AuthContext';
@@ -93,11 +94,11 @@ const MedicineDetailScreen = ({ navigation, route }) => {
           </Text>
         </View>
         {timesDisplay && (
-          <Text style={styles.timesText}>⏰ {timesDisplay}</Text>
+          <Text style={styles.timesText}><MaterialCommunityIcons name="clock-outline" size={14} color="#7f8c8d" /> {timesDisplay}</Text>
         )}
         {schedule.currentStock != null && (
           <Text style={[styles.stockText, schedule.currentStock <= 5 && styles.lowStock]}>
-            📦 Stock: {schedule.currentStock} remaining
+            <MaterialCommunityIcons name="package-variant" size={14} color={schedule.currentStock <= 5 ? '#e74c3c' : '#7f8c8d'} /> Stock: {schedule.currentStock} remaining
           </Text>
         )}
       </View>
@@ -188,11 +189,11 @@ const MedicineDetailScreen = ({ navigation, route }) => {
           style={styles.editBtn}
           onPress={() => navigation.navigate('EditSchedule', { schedule })}
         >
-          <Text style={styles.editBtnText}>✏️ Edit Schedule</Text>
+          <Text style={styles.editBtnText}><MaterialCommunityIcons name="pencil-outline" size={15} color="#fff" /> Edit Schedule</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
-          <Text style={styles.deleteBtnText}>🗑️ Remove Medicine</Text>
+          <Text style={styles.deleteBtnText}><MaterialCommunityIcons name="delete-outline" size={15} color="#e74c3c" /> Remove Medicine</Text>
         </TouchableOpacity>
       </View>
 

@@ -3,6 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   Alert, KeyboardAvoidingView, Platform, ActivityIndicator
 } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import api from '../api/client';
 import { AuthContext } from '../context/AuthContext';
 
@@ -31,7 +32,7 @@ const AddGroupScreen = ({ navigation }) => {
       const createdGroup = groupRes.data;
 
       Alert.alert(
-        '✅ Group Created',
+        'Group Created',
         'Your group is ready! Add members now?',
         [
           {
@@ -67,7 +68,7 @@ const AddGroupScreen = ({ navigation }) => {
       <View style={styles.content}>
         {/* Icon */}
         <View style={styles.iconCircle}>
-          <Text style={{ fontSize: 40 }}>👥</Text>
+          <MaterialCommunityIcons name="account-group" size={40} color="#3b82f6" />
         </View>
 
         <Text style={styles.title}>Create a Care Group</Text>
@@ -103,7 +104,7 @@ const AddGroupScreen = ({ navigation }) => {
 
         {/* Info */}
         <View style={styles.infoRow}>
-          <Text style={styles.infoIcon}>ℹ️</Text>
+          <MaterialCommunityIcons name="information-outline" size={14} color="#0369a1" style={{ marginTop: 1 }} />
           <Text style={styles.infoText}>
             You ({userInfo?.fullName || userInfo?.username}) will be the admin. You can add members after creation.
           </Text>

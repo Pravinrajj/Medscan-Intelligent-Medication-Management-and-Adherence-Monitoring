@@ -1,5 +1,6 @@
 import React, { useState, useContext } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import api from '../api/client';
 import { AuthContext } from '../context/AuthContext';
@@ -90,7 +91,7 @@ const ScanPrescriptionScreen = ({ navigation }) => {
           <Image source={{ uri: image }} style={styles.image} resizeMode="contain" />
         ) : (
           <View style={styles.placeholder}>
-            <Text style={styles.placeholderIcon}>📷</Text>
+            <MaterialCommunityIcons name="camera-outline" size={48} color="#bdc3c7" style={{marginBottom: 8}} />
             <Text style={styles.placeholderText}>No image selected</Text>
           </View>
         )}
@@ -99,10 +100,10 @@ const ScanPrescriptionScreen = ({ navigation }) => {
       {/* Buttons */}
       <View style={styles.buttonRow}>
         <TouchableOpacity style={[styles.pickBtn, styles.cameraBtn]} onPress={() => pickImage(true)}>
-          <Text style={styles.pickBtnText}>📸 Camera</Text>
+          <Text style={styles.pickBtnText}><MaterialCommunityIcons name="camera" size={15} color="#fff" /> Camera</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.pickBtn, styles.galleryBtn]} onPress={() => pickImage(false)}>
-          <Text style={styles.pickBtnText}>🖼️ Gallery</Text>
+          <Text style={styles.pickBtnText}><MaterialCommunityIcons name="image-outline" size={15} color="#fff" /> Gallery</Text>
         </TouchableOpacity>
       </View>
 
@@ -111,7 +112,7 @@ const ScanPrescriptionScreen = ({ navigation }) => {
           {loading ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.scanBtnText}>🔍 Scan Now</Text>
+            <Text style={styles.scanBtnText}><MaterialCommunityIcons name="magnify" size={17} color="#fff" /> Scan Now</Text>
           )}
         </TouchableOpacity>
       )}

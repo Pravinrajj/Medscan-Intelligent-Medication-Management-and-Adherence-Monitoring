@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, FlatList,
   ActivityIndicator, RefreshControl, Alert, Modal
 } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Contacts from 'expo-contacts';
 import { useFocusEffect } from '@react-navigation/native';
 import api from '../api/client';
@@ -176,7 +177,7 @@ const SharedSchedulesScreen = ({ route, navigation }) => {
       <View style={styles.scheduleCard}>
         <View style={styles.cardTop}>
           <View style={styles.cardIconCircle}>
-            <Text style={{ fontSize: 20 }}>💊</Text>
+            <MaterialCommunityIcons name="pill" size={20} color="#3b82f6" />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.medName}>{medName}</Text>
@@ -196,7 +197,7 @@ const SharedSchedulesScreen = ({ route, navigation }) => {
             {times.map((t, idx) => (
               <View key={idx} style={styles.timeChip}>
                 <Text style={styles.timeChipText}>
-                  ⏰ {t.scheduledTime ? t.scheduledTime.substring(0, 5) : '—'}
+                  <MaterialCommunityIcons name="clock-outline" size={12} color="#64748b" /> {t.scheduledTime ? t.scheduledTime.substring(0, 5) : '—'}
                 </Text>
               </View>
             ))}
@@ -284,7 +285,7 @@ const SharedSchedulesScreen = ({ route, navigation }) => {
         }
         ListEmptyComponent={
           <View style={styles.emptyBox}>
-            <Text style={{ fontSize: 48, marginBottom: 12 }}>📊</Text>
+            <MaterialCommunityIcons name="chart-bar" size={48} color="#94a3b8" style={{marginBottom: 12}} />
             <Text style={styles.emptyTitle}>No shared schedules</Text>
             <Text style={styles.emptyDesc}>
               Share your medication schedules with the group so members can help track and remind
@@ -296,7 +297,7 @@ const SharedSchedulesScreen = ({ route, navigation }) => {
       {/* Share button — fixed bottom bar */}
       <View style={styles.bottomBar}>
         <TouchableOpacity style={styles.shareBtn} onPress={openSharePicker} activeOpacity={0.8}>
-          <Text style={styles.shareBtnText}>📊 Share My Schedules</Text>
+          <Text style={styles.shareBtnText}><MaterialCommunityIcons name="chart-bar" size={15} color="#fff" /> Share My Schedules</Text>
         </TouchableOpacity>
       </View>
 
@@ -316,7 +317,7 @@ const SharedSchedulesScreen = ({ route, navigation }) => {
               </View>
             ) : mySchedules.length === 0 ? (
               <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-                <Text style={{ fontSize: 36, marginBottom: 8 }}>📋</Text>
+                <MaterialCommunityIcons name="clipboard-text-outline" size={36} color="#94a3b8" style={{ marginBottom: 8 }} />
                 <Text style={{ fontSize: 15, fontWeight: '600', color: '#64748b' }}>No schedules found</Text>
                 <Text style={{ fontSize: 13, color: '#94a3b8', marginTop: 4, textAlign: 'center' }}>
                   Add medicines to your dashboard first, then share them here

@@ -1,5 +1,6 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Switch, ActivityIndicator } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { AuthContext } from '../context/AuthContext';
@@ -135,7 +136,7 @@ const ProfileScreen = ({ navigation }) => {
         <View style={styles.cardHeader}>
           <Text style={styles.cardTitle}>Personal Information</Text>
           <TouchableOpacity onPress={() => editing ? handleSaveProfile() : setEditing(true)}>
-            <Text style={styles.editBtn}>{saving ? 'Saving...' : editing ? '💾 Save' : '✏️ Edit'}</Text>
+            <Text style={styles.editBtn}>{saving ? 'Saving...' : editing ? 'Save' : 'Edit'}</Text>
           </TouchableOpacity>
         </View>
 
@@ -190,7 +191,7 @@ const ProfileScreen = ({ navigation }) => {
 
         <View style={styles.settingRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.settingLabel}>🔔 Medication Reminders</Text>
+            <Text style={styles.settingLabel}><MaterialCommunityIcons name="bell-outline" size={15} color="#1e293b" /> Medication Reminders</Text>
             <Text style={styles.settingHint}>
               {remindersEnabled ? 'Notifications are on for scheduled medicines' : 'All notifications are off'}
             </Text>
@@ -205,7 +206,7 @@ const ProfileScreen = ({ navigation }) => {
 
         <View style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: '#f0f0f0', paddingTop: 14 }]}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.settingLabel}>🔒 Screen Lock</Text>
+            <Text style={styles.settingLabel}><MaterialCommunityIcons name="lock-outline" size={15} color="#1e293b" /> Screen Lock</Text>
             <Text style={styles.settingHint}>
               {biometricEnabled ? 'Fingerprint/PIN required on app launch' : 'Off — no authentication required'}
             </Text>
@@ -223,17 +224,17 @@ const ProfileScreen = ({ navigation }) => {
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Quick Actions</Text>
         <TouchableOpacity style={styles.actionRow} onPress={() => navigation.navigate('Report')}>
-          <Text style={styles.actionText}>📊 Adherence Reports</Text>
+          <Text style={styles.actionText}><MaterialCommunityIcons name="chart-bar" size={15} color="#1e293b" /> Adherence Reports</Text>
           <Text style={styles.actionArrow}>→</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionRow} onPress={() => navigation.getParent()?.navigate('History')}>
-          <Text style={styles.actionText}>📋 View History</Text>
+          <Text style={styles.actionText}><MaterialCommunityIcons name="clipboard-text-outline" size={15} color="#1e293b" /> View History</Text>
           <Text style={styles.actionArrow}>→</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.actionRow, { borderBottomWidth: 0 }]} onPress={() => {
           Alert.alert('MedScan Help', 'MedScan helps you track medications, set reminders, and manage adherence with care groups.\n\n• Dashboard: View & log today\'s medicines\n• Groups: Share schedules with family/caregivers\n• History: Review past adherence\n• Profile: Edit info & settings\n\nNeed help? Contact: support@medscan.app');
         }}>
-          <Text style={styles.actionText}>❓ Help & About</Text>
+          <Text style={styles.actionText}><MaterialCommunityIcons name="help-circle-outline" size={15} color="#1e293b" /> Help & About</Text>
           <Text style={styles.actionArrow}>→</Text>
         </TouchableOpacity>
       </View>

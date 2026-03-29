@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useContext } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ActivityIndicator, TextInput, Modal, ScrollView, RefreshControl } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Contacts from 'expo-contacts';
 import { useFocusEffect } from '@react-navigation/native';
 import api from '../api/client';
@@ -428,7 +429,7 @@ const GroupDetailsScreen = ({ route, navigation }) => {
     <View style={styles.headerCard}>
       <View style={styles.headerRow}>
         <View style={styles.headerIcon}>
-          <Text style={{ fontSize: 28 }}>👥</Text>
+          <MaterialCommunityIcons name="account-group" size={28} color="#3b82f6" />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerName}>{groupName}</Text>
@@ -443,10 +444,10 @@ const GroupDetailsScreen = ({ route, navigation }) => {
       {isAdmin && (
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
           <TouchableOpacity style={styles.editBtn} onPress={() => { setEditName(groupName); setEditDescription(groupDescription); setEditModalVisible(true); }}>
-            <Text style={styles.editBtnText}>✏️ Edit</Text>
+            <Text style={styles.editBtnText}><MaterialCommunityIcons name="pencil-outline" size={14} color="#2563eb" /> Edit</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.editBtn, { backgroundColor: '#fef2f2', borderColor: '#fecaca' }]} onPress={handleDeleteGroup}>
-            <Text style={[styles.editBtnText, { color: '#dc2626' }]}>🗑️ Delete</Text>
+            <Text style={[styles.editBtnText, { color: '#dc2626' }]}><MaterialCommunityIcons name="delete-outline" size={14} color="#dc2626" /> Delete</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -536,7 +537,7 @@ const GroupDetailsScreen = ({ route, navigation }) => {
         <View style={styles.scheduleTimes}>
           {times.map((t, idx) => (
             <Text key={idx} style={styles.scheduleTimeChip}>
-              ⏰ {t.scheduledTime ? t.scheduledTime.substring(0, 5) : '—'}
+              <MaterialCommunityIcons name="clock-outline" size={12} color="#64748b" /> {t.scheduledTime ? t.scheduledTime.substring(0, 5) : '—'}
             </Text>
           ))}
         </View>
@@ -545,7 +546,7 @@ const GroupDetailsScreen = ({ route, navigation }) => {
             style={styles.reminderBtn}
             onPress={() => handleTriggerReminder(sharedByUserId, scheduleId)}
           >
-            <Text style={styles.reminderBtnText}>🔔 Send Reminder</Text>
+            <Text style={styles.reminderBtnText}><MaterialCommunityIcons name="bell-ring-outline" size={14} color="#fff" /> Send Reminder</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -587,7 +588,7 @@ const GroupDetailsScreen = ({ route, navigation }) => {
         return (
           <>
             <TouchableOpacity style={styles.addMemberBtn} onPress={handleShareSchedules}>
-              <Text style={styles.addMemberBtnText}>📊 Share My Schedules</Text>
+              <Text style={styles.addMemberBtnText}><MaterialCommunityIcons name="chart-bar" size={14} color="#fff" /> Share My Schedules</Text>
             </TouchableOpacity>
             <FlatList
               data={sharedSchedules}
@@ -596,7 +597,7 @@ const GroupDetailsScreen = ({ route, navigation }) => {
               scrollEnabled={false}
               ListEmptyComponent={
                 <View style={{ alignItems: 'center', paddingVertical: 30 }}>
-                  <Text style={{ fontSize: 36, marginBottom: 10 }}>📋</Text>
+                  <MaterialCommunityIcons name="clipboard-text-outline" size={36} color="#94a3b8" style={{marginBottom: 10}} />
                   <Text style={styles.emptyText}>No shared schedules</Text>
                   <Text style={{ fontSize: 13, color: '#95a5a6', marginTop: 4, textAlign: 'center' }}>
                     Tap "Share My Schedules" to let group members see your medications
@@ -648,7 +649,7 @@ const GroupDetailsScreen = ({ route, navigation }) => {
           <Text style={styles.sectionLabel}>MEMBERS · {members.length + 1}</Text>
           {isAdmin && (
             <TouchableOpacity style={styles.addMemberBtn} onPress={handleOpenAddMember}>
-              <Text style={styles.addMemberBtnText}>➕ Add Member</Text>
+              <Text style={styles.addMemberBtnText}><MaterialCommunityIcons name="account-plus" size={14} color="#fff" /> Add Member</Text>
             </TouchableOpacity>
           )}
           {/* Admin as first entry */}
@@ -682,7 +683,7 @@ const GroupDetailsScreen = ({ route, navigation }) => {
           onPress={() => navigation.navigate('SharedSchedules', { group })}
           activeOpacity={0.7}
         >
-          <Text style={{ fontSize: 22, marginRight: 12 }}>📊</Text>
+          <MaterialCommunityIcons name="chart-bar" size={22} color="#3b82f6" style={{marginRight: 12}} />
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: 15, fontWeight: '700', color: '#1e293b' }}>Shared Schedules</Text>
             <Text style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
@@ -696,7 +697,7 @@ const GroupDetailsScreen = ({ route, navigation }) => {
         {!isAdmin && (
           <View style={[styles.sectionCard, { marginBottom: 20 }]}>
             <TouchableOpacity style={styles.leaveBtn} onPress={handleLeaveGroup}>
-              <Text style={styles.leaveBtnText}>🚪 Leave Group</Text>
+              <Text style={styles.leaveBtnText}><MaterialCommunityIcons name="exit-run" size={15} color="#dc2626" /> Leave Group</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -794,7 +795,7 @@ const GroupDetailsScreen = ({ route, navigation }) => {
                 {/* Empty states */}
                 {filteredUsers.length === 0 && dbSearchResults.length === 0 && !dbSearching && !contactLoading && (
                   <View style={{ alignItems: 'center', paddingVertical: 24 }}>
-                    <Text style={{ fontSize: 32, marginBottom: 8 }}>👤</Text>
+                    <MaterialCommunityIcons name="account-outline" size={32} color="#95a5a6" style={{marginBottom: 8}} />
                     {addMemberSearch.trim() ? (
                       <>
                         <Text style={styles.emptyText}>No users found</Text>

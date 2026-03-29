@@ -1,5 +1,6 @@
 import React, { useState, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
 
 const LoginScreen = ({ navigation }) => {
@@ -29,7 +30,7 @@ const LoginScreen = ({ navigation }) => {
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={styles.topSection}>
-        <Text style={styles.logo}>💊</Text>
+        <MaterialCommunityIcons name="pill" size={56} color="#fff" />
         <Text style={styles.appName}>MedScan</Text>
         <Text style={styles.tagline}>Your medication companion</Text>
       </View>

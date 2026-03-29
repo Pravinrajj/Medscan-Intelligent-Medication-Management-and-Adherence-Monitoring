@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, ActivityIndicator, Switch } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../api/client';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 const TYPE_UNITS = {
-  TABLET: { options: ['Tablet(s)', 'Capsule(s)'], default: 'Tablet(s)', icon: '💊' },
-  SYRUP: { options: ['mL', 'Teaspoon(s)', 'Tablespoon(s)'], default: 'mL', icon: '🧴' },
-  INJECTION: { options: ['mL', 'Unit(s)', 'IU'], default: 'mL', icon: '💉' },
-  OTHER: { options: ['Dose(s)', 'Unit(s)', 'Tablet(s)', 'mL', 'Puff(s)', 'Drop(s)'], default: 'Dose(s)', icon: '💠' },
+  TABLET: { options: ['Tablet(s)', 'Capsule(s)'], default: 'Tablet(s)', icon: 'pill' },
+  SYRUP: { options: ['mL', 'Teaspoon(s)', 'Tablespoon(s)'], default: 'mL', icon: 'bottle-tonic' },
+  INJECTION: { options: ['mL', 'Unit(s)', 'IU'], default: 'mL', icon: 'needle' },
+  OTHER: { options: ['Dose(s)', 'Unit(s)', 'Tablet(s)', 'mL', 'Puff(s)', 'Drop(s)'], default: 'Dose(s)', icon: 'help-circle' },
 };
 
 const TYPES = Object.keys(TYPE_UNITS);
@@ -187,7 +188,9 @@ const EditScheduleScreen = ({ navigation, route }) => {
         {/* Medicine name (read-only) */}
         <View style={styles.medicineHeader}>
           <Text style={styles.medicineName}>{medicine.name || 'Medication'}</Text>
-          <Text style={styles.medicineType}>{TYPE_UNITS[medType]?.icon} {medType.charAt(0) + medType.slice(1).toLowerCase()}</Text>
+          <Text style={styles.medicineType}>
+            <MaterialCommunityIcons name={TYPE_UNITS[medType]?.icon || 'pill'} size={14} color="#7f8c8d" /> {medType.charAt(0) + medType.slice(1).toLowerCase()}
+          </Text>
         </View>
 
         {/* Dosage */}
@@ -255,7 +258,7 @@ const EditScheduleScreen = ({ navigation, route }) => {
         {/* As Needed info */}
         {isAsNeeded && (
           <View style={styles.infoCard}>
-            <Text style={styles.infoText}>ℹ️ No scheduled reminders — take when needed. Stock tracking still works.</Text>
+            <Text style={styles.infoText}><MaterialCommunityIcons name="information" size={14} color="#3498db" /> No scheduled reminders — take when needed. Stock tracking still works.</Text>
           </View>
         )}
 
@@ -266,11 +269,11 @@ const EditScheduleScreen = ({ navigation, route }) => {
             {times.map((t, idx) => (
               <View key={idx} style={styles.timeRow}>
                 <TouchableOpacity style={styles.timeButton} onPress={() => showTimepicker(idx)}>
-                  <Text style={styles.timeButtonText}>⏰ {formatTime(t)}</Text>
+                  <Text style={styles.timeButtonText}><MaterialCommunityIcons name="clock-outline" size={16} color="#2c3e50" /> {formatTime(t)}</Text>
                 </TouchableOpacity>
                 {times.length > 1 && (
                   <TouchableOpacity style={styles.removeTimeBtn} onPress={() => removeTime(idx)}>
-                    <Text style={styles.removeTimeBtnText}>✗</Text>
+                    <Text style={styles.removeTimeBtnText}><MaterialCommunityIcons name="close" size={16} color="#e74c3c" /></Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -320,7 +323,7 @@ const EditScheduleScreen = ({ navigation, route }) => {
         {/* Notification Toggle */}
         <View style={styles.notifCard}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.notifTitle}>🔔 Reminders</Text>
+            <Text style={styles.notifTitle}><MaterialCommunityIcons name="bell-ring-outline" size={15} color="#2c3e50" /> Reminders</Text>
             <Text style={styles.notifHint}>
               {notificationsOn 
                 ? 'You will get reminders for this medicine' 
@@ -340,13 +343,13 @@ const EditScheduleScreen = ({ navigation, route }) => {
           {saving ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.saveBtnText}>💾 Update Schedule</Text>
+            <Text style={styles.saveBtnText}><MaterialCommunityIcons name="content-save-outline" size={17} color="#fff" /> Update Schedule</Text>
           )}
         </TouchableOpacity>
 
         {/* Delete Button */}
         <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
-          <Text style={styles.deleteBtnText}>🗑️ Delete Schedule</Text>
+          <Text style={styles.deleteBtnText}><MaterialCommunityIcons name="delete-outline" size={15} color="#e74c3c" /> Delete Schedule</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
