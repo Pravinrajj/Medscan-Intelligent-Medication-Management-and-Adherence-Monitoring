@@ -8,6 +8,8 @@ import * as Contacts from 'expo-contacts';
 import { useFocusEffect } from '@react-navigation/native';
 import api from '../api/client';
 import { AuthContext } from '../context/AuthContext';
+import { useToast } from '../components/Toast';
+import { colors, fonts, spacing, radii, shadows } from '../theme';
 
 // System events — automated structural events
 const SYSTEM_TYPES = [
@@ -15,28 +17,30 @@ const SYSTEM_TYPES = [
   'GROUP_DELETED', 'SCHEDULES_SHARED', 'SETTINGS_CHANGED',
 ];
 
+// Color palette for member names
+const NAME_COLORS = ['#E11D48', '#7C3AED', '#0891B2', '#059669', '#D97706', '#DC2626', '#2563EB', '#9333EA'];
+
 const GroupChatScreen = ({ route, navigation }) => {
   const { userInfo } = useContext(AuthContext);
+  const toast = useToast();
   const group = route.params?.group;
   const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [memberNameMap, setMemberNameMap] = useState({}); // userId -> display name
+  const [memberNameMap, setMemberNameMap] = useState({});
   const flatListRef = useRef(null);
 
   const isAdmin = group?.admin?.id === userInfo?.id;
   const allowTriggers = group?.allowMemberTriggers || false;
   const groupName = group?.groupName || group?.name || 'Group';
 
-  // Load group members + contact names for display
+  // Load group members + contact names
   useEffect(() => {
     (async () => {
       try {
-        // 1. Get group members from API
         const membersRes = await api.get(`/groups/members/${group.id}`);
         const members = membersRes.data || [];
 
-        // 2. Load device contacts for phone → contact name mapping
         let phoneToContact = {};
         try {
           const { status } = await Contacts.requestPermissionsAsync();
@@ -49,21 +53,17 @@ const GroupChatScreen = ({ route, navigation }) => {
               });
             });
           }
-        } catch (e) { /* contacts permission denied — use backend names */ }
+        } catch (e) { /* contacts permission denied */ }
 
-        // 3. Build userId → displayName map
         const nameMap = {};
-        // Add admin
         if (group?.admin) {
           const adminPhone = (group.admin.phoneNumber || '').replace(/\D/g, '').slice(-10);
           nameMap[group.admin.id] = phoneToContact[adminPhone] || group.admin.fullName || group.admin.username;
         }
-        // Add members
         members.forEach(m => {
           const mPhone = (m.phoneNumber || '').replace(/\D/g, '').slice(-10);
           nameMap[m.id] = phoneToContact[mPhone] || m.fullName || m.username;
         });
-
         setMemberNameMap(nameMap);
       } catch (e) {
         console.log('[GroupChat] Member load error:', e.message);
@@ -74,7 +74,6 @@ const GroupChatScreen = ({ route, navigation }) => {
   const fetchActivity = useCallback(async () => {
     try {
       const res = await api.get(`/groups/${group.id}/activity`);
-      // API returns newest-first — reverse for chronological (oldest top → newest bottom)
       setActivity((res.data || []).reverse());
     } catch (e) {
       console.error('[GroupChat] Fetch error:', e.message);
@@ -91,33 +90,25 @@ const GroupChatScreen = ({ route, navigation }) => {
     }, [fetchActivity])
   );
 
-  // Auto-scroll to bottom when activity loads
   useEffect(() => {
     if (activity.length > 0 && !loading) {
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 250);
     }
   }, [activity, loading]);
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchActivity();
-  };
+  const onRefresh = () => { setRefreshing(true); fetchActivity(); };
 
-  // Get display name for a userId — contact name preferred, "You" for self
   const getDisplayName = (userId) => {
     if (userId === userInfo?.id) return 'You';
     return memberNameMap[userId] || 'Member';
   };
 
-  // Strip user name from message start, e.g. "John took Aspirin" → "took Aspirin"
   const stripNameFromMessage = (message, userId) => {
     if (!message) return '';
-    // Try to strip the backend-inserted name from the beginning
     const backendName = memberNameMap[userId];
     if (backendName && message.startsWith(backendName + ' ')) {
       return message.substring(backendName.length + 1);
     }
-    // Also try fullName/username from admin
     if (group?.admin?.id === userId) {
       const names = [group.admin.fullName, group.admin.username].filter(Boolean);
       for (const n of names) {
@@ -127,18 +118,13 @@ const GroupChatScreen = ({ route, navigation }) => {
     return message;
   };
 
-  // Color for each member (consistent by userId)
-  const getNameColor = (userId) => {
-    const colors = ['#e11d48', '#7c3aed', '#0891b2', '#059669', '#d97706', '#dc2626', '#2563eb', '#9333ea'];
-    return colors[(userId || 0) % colors.length];
-  };
+  const getNameColor = (userId) => NAME_COLORS[(userId || 0) % NAME_COLORS.length];
 
   const getDateLabel = (timestamp) => {
     if (!timestamp) return '';
     const date = new Date(timestamp);
     const today = new Date();
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
     if (date.toDateString() === today.toDateString()) return 'Today';
     if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
     return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -149,15 +135,14 @@ const GroupChatScreen = ({ route, navigation }) => {
     return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  // Event type → styling
   const getEventStyle = (type) => {
     switch (type) {
-      case 'TAKEN':         return { icon: 'pill', accent: '#059669' };
-      case 'MISSED':        return { icon: 'alert-outline', accent: '#dc2626' };
-      case 'SNOOZED':       return { icon: 'clock-outline', accent: '#d97706' };
-      case 'REMINDER_SENT': return { icon: 'bell-ring-outline', accent: '#2563eb' };
-      case 'UNDO':          return { icon: 'undo', accent: '#6b7280' };
-      default:              return { icon: 'clipboard-text-outline', accent: '#6b7280' };
+      case 'TAKEN':         return { icon: 'check-circle-outline', accent: colors.taken };
+      case 'MISSED':        return { icon: 'alert-circle-outline', accent: colors.missed };
+      case 'SNOOZED':       return { icon: 'clock-outline', accent: colors.snoozed };
+      case 'REMINDER_SENT': return { icon: 'bell-ring-outline', accent: colors.primary };
+      case 'UNDO':          return { icon: 'undo', accent: colors.textTertiary };
+      default:              return { icon: 'clipboard-text-outline', accent: colors.textTertiary };
     }
   };
 
@@ -180,10 +165,10 @@ const GroupChatScreen = ({ route, navigation }) => {
                   scheduleId: null,
                 });
               }
-              Alert.alert('Sent', `Reminders sent to ${targets.length} member(s).`);
+              toast.success(`Reminders sent to ${targets.length} member(s).`);
               fetchActivity();
             } catch (e) {
-              Alert.alert('Error', 'Failed to send reminders.');
+              toast.error('Failed to send reminders.');
             }
           },
         },
@@ -197,12 +182,10 @@ const GroupChatScreen = ({ route, navigation }) => {
     const performerId = item.performedByUserId || item.userId;
     const prevItem = index > 0 ? activity[index - 1] : null;
 
-    // Date separator — centered pill like WhatsApp
     const currentDate = getDateLabel(item.timestamp);
     const prevDate = prevItem ? getDateLabel(prevItem.timestamp) : '';
     const showDateSep = currentDate !== prevDate;
 
-    // Show name label if different user from previous bubble
     const prevPerformer = prevItem ? (prevItem.performedByUserId || prevItem.userId) : null;
     const showNameLabel = !isMe && performerId !== prevPerformer;
 
@@ -221,7 +204,6 @@ const GroupChatScreen = ({ route, navigation }) => {
       );
     }
 
-    // Chat bubble
     const ev = getEventStyle(item.activityType);
     const displayName = getDisplayName(performerId);
     const cleanMessage = stripNameFromMessage(item.message, performerId);
@@ -235,9 +217,8 @@ const GroupChatScreen = ({ route, navigation }) => {
           </View>
         )}
         <View style={[styles.bubbleRow, isMe ? styles.bubbleRowRight : styles.bubbleRowLeft]}>
-          {/* Avatar — left side for others */}
           {!isMe && (
-            <View style={[styles.avatar, { backgroundColor: nameColor + '20' }]}>
+            <View style={[styles.avatar, { backgroundColor: nameColor + '18' }]}>
               <Text style={[styles.avatarText, { color: nameColor }]}>
                 {displayName[0]?.toUpperCase() || '?'}
               </Text>
@@ -245,26 +226,25 @@ const GroupChatScreen = ({ route, navigation }) => {
           )}
 
           <View style={[styles.bubble, isMe ? styles.bubbleSelf : styles.bubbleOther]}>
-            {/* Name label — top of bubble */}
             {isMe ? (
-              <Text style={[styles.bubbleName, { color: '#2563eb' }]}>You</Text>
+              <Text style={[styles.bubbleName, { color: colors.primary }]}>You</Text>
             ) : showNameLabel ? (
               <Text style={[styles.bubbleName, { color: nameColor }]}>{displayName}</Text>
             ) : null}
 
-            {/* Message with event icon */}
-            <Text style={styles.bubbleMessage}>
-              <MaterialCommunityIcons name={ev.icon} size={14} color={ev.accent} />  {cleanMessage || item.message}
-            </Text>
+            <View style={styles.messageRow}>
+              <View style={[styles.eventDot, { backgroundColor: ev.accent }]}>
+                <MaterialCommunityIcons name={ev.icon} size={12} color={colors.textInverse} />
+              </View>
+              <Text style={styles.bubbleMessage}>{cleanMessage || item.message}</Text>
+            </View>
 
-            {/* Time — bottom right */}
             <Text style={styles.bubbleTime}>{getTimeLabel(item.timestamp)}</Text>
           </View>
 
-          {/* Avatar — right side for self */}
           {isMe && (
-            <View style={[styles.avatar, { backgroundColor: '#2563eb20', marginLeft: 6, marginRight: 0 }]}>
-              <Text style={[styles.avatarText, { color: '#2563eb' }]}>
+            <View style={[styles.avatar, { backgroundColor: colors.primary + '18', marginLeft: 6, marginRight: 0 }]}>
+              <Text style={[styles.avatarText, { color: colors.primary }]}>
                 {(userInfo?.fullName || userInfo?.username || 'Y')[0].toUpperCase()}
               </Text>
             </View>
@@ -274,7 +254,7 @@ const GroupChatScreen = ({ route, navigation }) => {
     );
   };
 
-  // Header — tappable group name
+  // Header
   React.useLayoutEffect(() => {
     navigation.setOptions({
       headerTitle: () => (
@@ -283,12 +263,12 @@ const GroupChatScreen = ({ route, navigation }) => {
           style={styles.headerTouchable}
         >
           <View style={styles.headerAvatar}>
-            <MaterialCommunityIcons name="account-group" size={16} color="#3498db" />
+            <MaterialCommunityIcons name="account-group" size={16} color={colors.primary} />
           </View>
           <View>
             <Text style={styles.headerTitle}>{groupName}</Text>
             <Text style={styles.headerSubtitle}>
-              {group?.memberCount || '—'} members · tap for info
+              {group?.memberCount || '—'} members
             </Text>
           </View>
         </TouchableOpacity>
@@ -299,7 +279,7 @@ const GroupChatScreen = ({ route, navigation }) => {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#3498db" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -311,20 +291,15 @@ const GroupChatScreen = ({ route, navigation }) => {
         data={activity}
         renderItem={renderActivityItem}
         keyExtractor={(item, idx) => item.id || String(idx)}
-        contentContainerStyle={[
-          styles.listContent,
-          activity.length === 0 && { flex: 1 },
-        ]}
-        showsVerticalScrollIndicator={true}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        contentContainerStyle={[styles.listContent, activity.length === 0 && { flex: 1 }]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
         onContentSizeChange={() => {
-          if (activity.length > 0) {
-            flatListRef.current?.scrollToEnd({ animated: false });
-          }
+          if (activity.length > 0) flatListRef.current?.scrollToEnd({ animated: false });
         }}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <MaterialCommunityIcons name="clipboard-text-outline" size={48} color="#94a3b8" style={{marginBottom: 12}} />
+            <MaterialCommunityIcons name="clipboard-text-outline" size={48} color={colors.textTertiary} />
             <Text style={styles.emptyTitle}>No activity yet</Text>
             <Text style={styles.emptyDesc}>
               Medicine sharing, dose tracking, and reminders will appear here
@@ -333,10 +308,10 @@ const GroupChatScreen = ({ route, navigation }) => {
         }
       />
 
-      {/* FAB — Send Reminder (admin always, members if allowed) */}
+      {/* FAB — Send Reminder */}
       {(isAdmin || allowTriggers) && (
         <TouchableOpacity style={styles.fab} onPress={handleSendReminder} activeOpacity={0.8}>
-          <MaterialCommunityIcons name="bell-ring" size={18} color="#fff" />
+          <MaterialCommunityIcons name="bell-ring" size={18} color={colors.textInverse} />
           <Text style={styles.fabLabel}>Remind</Text>
         </TouchableOpacity>
       )}
@@ -345,95 +320,89 @@ const GroupChatScreen = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#e8edf2' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#e8edf2' },
-  listContent: { paddingHorizontal: 10, paddingTop: 8, paddingBottom: 100 },
+  container: { flex: 1, backgroundColor: colors.background },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
+  listContent: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: 100 },
 
   // Header
-  headerTouchable: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  headerTouchable: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   headerAvatar: {
-    width: 36, height: 36, borderRadius: 18, backgroundColor: '#e0f2fe',
+    width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primaryBg,
     alignItems: 'center', justifyContent: 'center',
   },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#1e293b' },
-  headerSubtitle: { fontSize: 11, color: '#94a3b8' },
+  headerTitle: { fontSize: 16, fontFamily: fonts.bold, color: colors.text },
+  headerSubtitle: { fontSize: 11, fontFamily: fonts.regular, color: colors.textTertiary },
 
-  // Date separator — centered pill
-  dateSep: { alignItems: 'center', marginVertical: 12 },
+  // Date separator
+  dateSep: { alignItems: 'center', marginVertical: spacing.md },
   dateText: {
-    backgroundColor: '#d1dce8', paddingHorizontal: 14, paddingVertical: 5,
-    borderRadius: 16, fontSize: 12, fontWeight: '600', color: '#475569',
+    backgroundColor: colors.surfaceHover, paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
+    borderRadius: radii.full, fontSize: 12, fontFamily: fonts.semiBold, color: colors.textSecondary,
     overflow: 'hidden',
   },
 
-  // System messages — centered subtle
-  systemRow: { alignItems: 'center', marginVertical: 4, paddingHorizontal: 30 },
+  // System messages
+  systemRow: { alignItems: 'center', marginVertical: spacing.xs, paddingHorizontal: spacing.xxl },
   systemText: {
-    backgroundColor: '#fffbeb', paddingHorizontal: 14, paddingVertical: 6,
-    borderRadius: 10, fontSize: 12, color: '#92400e', textAlign: 'center',
-    fontStyle: 'italic', overflow: 'hidden',
+    backgroundColor: colors.warningLight, paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2,
+    borderRadius: radii.sm, fontSize: 12, fontFamily: fonts.medium, color: colors.warningDark,
+    textAlign: 'center', fontStyle: 'italic', overflow: 'hidden',
   },
 
   // Bubble row
-  bubbleRow: { flexDirection: 'row', marginVertical: 2, alignItems: 'flex-start' },
+  bubbleRow: { flexDirection: 'row', marginVertical: 2, alignItems: 'flex-end' },
   bubbleRowLeft: { justifyContent: 'flex-start', paddingRight: 50 },
   bubbleRowRight: { justifyContent: 'flex-end', paddingLeft: 50 },
 
   // Avatar
   avatar: {
-    width: 30, height: 30, borderRadius: 15,
+    width: 28, height: 28, borderRadius: 14,
     alignItems: 'center', justifyContent: 'center',
-    marginRight: 6, marginBottom: 2,
+    marginRight: spacing.xs,
   },
-  avatarText: { fontSize: 13, fontWeight: '700' },
+  avatarText: { fontSize: 12, fontFamily: fonts.bold },
 
   // Bubble
   bubble: {
-    maxWidth: '82%', paddingHorizontal: 12, paddingVertical: 8,
-    borderRadius: 16,
-    elevation: 1,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 2,
+    maxWidth: '82%', paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    borderRadius: radii.lg,
+    ...shadows.sm,
   },
   bubbleSelf: {
-    backgroundColor: '#dbeafe',
-    borderBottomRightRadius: 4,
+    backgroundColor: colors.primaryBg,
+    borderBottomRightRadius: radii.xs,
   },
   bubbleOther: {
-    backgroundColor: '#fff',
-    borderBottomLeftRadius: 4,
+    backgroundColor: colors.surface,
+    borderBottomLeftRadius: radii.xs,
   },
 
-  // Name label — top of bubble for others
-  bubbleName: {
-    fontSize: 13, fontWeight: '700', marginBottom: 2,
+  bubbleName: { fontSize: 12, fontFamily: fonts.bold, marginBottom: 2 },
+
+  messageRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  eventDot: {
+    width: 20, height: 20, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
   },
-
-  // Message
-  bubbleMessage: { fontSize: 14, color: '#1e293b', lineHeight: 20 },
-
-  // Time — bottom right
+  bubbleMessage: { fontSize: 14, fontFamily: fonts.regular, color: colors.text, lineHeight: 20, flex: 1 },
   bubbleTime: {
-    fontSize: 10, color: '#94a3b8', marginTop: 4, textAlign: 'right',
+    fontSize: 10, fontFamily: fonts.regular, color: colors.textTertiary, marginTop: spacing.xs, textAlign: 'right',
   },
 
   // FAB
   fab: {
-    position: 'absolute', bottom: 75, right: 20,
-    backgroundColor: '#2563eb', flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 18, paddingVertical: 12, borderRadius: 28,
-    elevation: 6,
-    shadowColor: '#2563eb', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35, shadowRadius: 8,
-    gap: 6,
+    position: 'absolute', bottom: 80, right: spacing.xl,
+    backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderRadius: radii.full,
+    ...shadows.colored(colors.primary),
+    gap: spacing.sm,
   },
-  fabIcon: { fontSize: 18 },
-  fabLabel: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  fabLabel: { color: colors.textInverse, fontSize: 14, fontFamily: fonts.bold },
 
   // Empty state
-  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b', marginBottom: 8 },
-  emptyDesc: { fontSize: 13, color: '#94a3b8', textAlign: 'center', lineHeight: 20 },
+  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xxl },
+  emptyTitle: { fontSize: 18, fontFamily: fonts.bold, color: colors.text, marginTop: spacing.md, marginBottom: spacing.sm },
+  emptyDesc: { fontSize: 13, fontFamily: fonts.regular, color: colors.textTertiary, textAlign: 'center', lineHeight: 20 },
 });
 
 export default GroupChatScreen;

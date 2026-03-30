@@ -1,24 +1,20 @@
 import React, { useContext, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Switch, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, SafeAreaView } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { AuthContext } from '../context/AuthContext';
-import api from '../api/client';
+import { useToast } from '../components/Toast';
 import { cancelAllReminders } from '../services/NotificationService';
+import { colors, fonts, spacing, radii, shadows, typography, components } from '../theme';
 
 const ProfileScreen = ({ navigation }) => {
   const { userInfo, logout } = useContext(AuthContext);
-  
-  const [editing, setEditing] = useState(false);
-  const [fullName, setFullName] = useState(userInfo?.fullName || '');
-  const [email, setEmail] = useState(userInfo?.email || '');
-  const [username, setUsername] = useState(userInfo?.username || '');
-  const [saving, setSaving] = useState(false);
+  const toast = useToast();
+
   const [remindersEnabled, setRemindersEnabled] = useState(true);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
 
-  // Load persisted settings on mount
   useEffect(() => {
     const loadSettings = async () => {
       try {
@@ -35,38 +31,19 @@ const ProfileScreen = ({ navigation }) => {
     loadSettings();
   }, []);
 
-  // Fetch stats
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const [statsRes, schedRes] = await Promise.all([
-          api.get(`/stats/user/${userInfo.id}`),
-          api.get(`/schedules/user/${userInfo.id}`),
-        ]);
-        setStats(statsRes.data);
-        setScheduleCount((schedRes.data || []).length);
-      } catch (e) {
-        console.log('[Profile] Stats fetch failed:', e.message);
-      } finally {
-        setStatsLoading(false);
-      }
-    };
-    if (userInfo?.id) fetchStats();
-  }, [userInfo?.id]);
-
   const handleToggleReminders = async (value) => {
     setRemindersEnabled(value);
     await AsyncStorage.setItem('global_notifications', String(value));
+    toast.info(value ? 'Reminders enabled' : 'All reminders turned off');
   };
 
   const handleToggleBiometric = async (value) => {
     if (value) {
-      // Verify device ownership before enabling
       try {
         const hasHardware = await LocalAuthentication.hasHardwareAsync();
         const isEnrolled = await LocalAuthentication.isEnrolledAsync();
         if (!hasHardware || !isEnrolled) {
-          Alert.alert('Not Available', 'Your device does not support biometric authentication or no biometric is enrolled.');
+          toast.warning('Your device does not support biometric authentication.');
           return;
         }
         const result = await LocalAuthentication.authenticateAsync({
@@ -75,32 +52,18 @@ const ProfileScreen = ({ navigation }) => {
           disableDeviceFallback: false,
         });
         if (!result.success) {
-          Alert.alert('Authentication Failed', 'Screen Lock was not enabled.');
+          toast.error('Authentication failed. Screen Lock was not enabled.');
           return;
         }
       } catch (e) {
-        Alert.alert('Error', 'Could not verify authentication.');
+        toast.error('Could not verify authentication.');
         return;
       }
     }
     setBiometricEnabled(value);
     await AsyncStorage.setItem('biometric_enabled', String(value));
     if (value) {
-      Alert.alert('Screen Lock Enabled', 'MedScan will ask for authentication when you open the app after being inactive.');
-    }
-  };
-
-  const handleSaveProfile = async () => {
-    setSaving(true);
-    try {
-      const res = await api.put('/auth/profile', { fullName, email, username });
-      Alert.alert('Updated', 'Profile saved successfully!');
-      setEditing(false);
-    } catch (e) {
-      const msg = e.response?.data?.message || 'Failed to update profile.';
-      Alert.alert('Error', msg);
-    } finally {
-      setSaving(false);
+      toast.success('Screen Lock enabled.');
     }
   };
 
@@ -116,202 +79,174 @@ const ProfileScreen = ({ navigation }) => {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Avatar Section */}
-      <View style={styles.avatarSection}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {(userInfo?.fullName || userInfo?.username || '?')[0].toUpperCase()}
-          </Text>
-        </View>
-        <Text style={styles.displayName}>{userInfo?.fullName || userInfo?.username}</Text>
-        {/* <Text style={styles.role}>{userInfo?.roles?.[0] || 'PATIENT'}</Text> */}
-        {userInfo?.createdAt && (
-          <Text style={styles.memberSince}>Member since {new Date(userInfo.createdAt).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</Text>
-        )}
-      </View>
-
-      {/* Info Card */}
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>Personal Information</Text>
-          <TouchableOpacity onPress={() => editing ? handleSaveProfile() : setEditing(true)}>
-            <Text style={styles.editBtn}>{saving ? 'Saving...' : editing ? 'Save' : 'Edit'}</Text>
-          </TouchableOpacity>
+    <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Header / User Card */}
+        <View style={styles.header}>
+          <Text style={styles.title}>Settings</Text>
         </View>
 
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Full Name</Text>
-          {editing ? (
-            <TextInput style={styles.fieldInput} value={fullName} onChangeText={setFullName} />
-          ) : (
-            <Text style={styles.fieldValue}>{fullName || '—'}</Text>
-          )}
-        </View>
-
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Email</Text>
-          {editing ? (
-            <TextInput style={styles.fieldInput} value={email} onChangeText={setEmail} keyboardType="email-address" />
-          ) : (
-            <Text style={styles.fieldValue}>{email || '—'}</Text>
-          )}
-        </View>
-
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Phone</Text>
-          <Text style={[styles.fieldValue, { color: '#95a5a6' }]}>{userInfo?.phoneNumber || '—'}</Text>
-          {editing && <Text style={styles.lockedHint}>Phone number cannot be changed</Text>}
-        </View>
-
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Username</Text>
-          {editing ? (
-            <TextInput style={styles.fieldInput} value={username} onChangeText={setUsername} autoCapitalize="none" />
-          ) : (
-            <Text style={styles.fieldValue}>{username || '—'}</Text>
-          )}
-        </View>
-
-        {editing && (
-          <TouchableOpacity style={styles.cancelBtn} onPress={() => {
-            setEditing(false);
-            setFullName(userInfo?.fullName || '');
-            setEmail(userInfo?.email || '');
-            setUsername(userInfo?.username || '');
-          }}>
-            <Text style={styles.cancelBtnText}>Cancel</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Settings Card */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Settings</Text>
-
-        <View style={styles.settingRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.settingLabel}><MaterialCommunityIcons name="bell-outline" size={15} color="#1e293b" /> Medication Reminders</Text>
-            <Text style={styles.settingHint}>
-              {remindersEnabled ? 'Notifications are on for scheduled medicines' : 'All notifications are off'}
+        <TouchableOpacity style={styles.userCard} onPress={() => navigation.navigate('Account')} activeOpacity={0.7}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>
+              {(userInfo?.fullName || userInfo?.username || '?')[0].toUpperCase()}
             </Text>
           </View>
-          <Switch
+          <View style={{ flex: 1 }}>
+            <Text style={styles.userName}>{userInfo?.fullName || userInfo?.username}</Text>
+            <Text style={styles.userEmail}>{userInfo?.email || 'View profile'}</Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={22} color={colors.textTertiary} />
+        </TouchableOpacity>
+
+        {/* Preferences */}
+        <Text style={styles.sectionLabel}>Preferences</Text>
+        <View style={styles.card}>
+          <SettingToggle
+            icon="bell-outline"
+            label="Medication Reminders"
+            hint={remindersEnabled ? 'Notifications are on' : 'All notifications off'}
             value={remindersEnabled}
-            onValueChange={handleToggleReminders}
-            trackColor={{ false: '#d1d5db', true: '#86efac' }}
-            thumbColor={remindersEnabled ? '#22c55e' : '#9ca3af'}
+            onToggle={handleToggleReminders}
           />
-        </View>
-
-        <View style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: '#f0f0f0', paddingTop: 14 }]}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.settingLabel}><MaterialCommunityIcons name="lock-outline" size={15} color="#1e293b" /> Screen Lock</Text>
-            <Text style={styles.settingHint}>
-              {biometricEnabled ? 'Fingerprint/PIN required on app launch' : 'Off — no authentication required'}
-            </Text>
-          </View>
-          <Switch
+          <View style={styles.divider} />
+          <SettingToggle
+            icon="lock-outline"
+            label="Screen Lock"
+            hint={biometricEnabled ? 'Fingerprint/PIN required' : 'No authentication required'}
             value={biometricEnabled}
-            onValueChange={handleToggleBiometric}
-            trackColor={{ false: '#d1d5db', true: '#93c5fd' }}
-            thumbColor={biometricEnabled ? '#3b82f6' : '#9ca3af'}
+            onToggle={handleToggleBiometric}
           />
         </View>
-      </View>
 
-      {/* Actions Card */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Quick Actions</Text>
-        <TouchableOpacity style={styles.actionRow} onPress={() => navigation.navigate('Report')}>
-          <Text style={styles.actionText}><MaterialCommunityIcons name="chart-bar" size={15} color="#1e293b" /> Adherence Reports</Text>
-          <Text style={styles.actionArrow}>→</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionRow} onPress={() => navigation.getParent()?.navigate('History')}>
-          <Text style={styles.actionText}><MaterialCommunityIcons name="clipboard-text-outline" size={15} color="#1e293b" /> View History</Text>
-          <Text style={styles.actionArrow}>→</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionRow, { borderBottomWidth: 0 }]} onPress={() => {
-          Alert.alert('MedScan Help', 'MedScan helps you track medications, set reminders, and manage adherence with care groups.\n\n• Dashboard: View & log today\'s medicines\n• Groups: Share schedules with family/caregivers\n• History: Review past adherence\n• Profile: Edit info & settings\n\nNeed help? Contact: support@medscan.app');
-        }}>
-          <Text style={styles.actionText}><MaterialCommunityIcons name="help-circle-outline" size={15} color="#1e293b" /> Help & About</Text>
-          <Text style={styles.actionArrow}>→</Text>
-        </TouchableOpacity>
-      </View>
+        {/* Navigation Items */}
+        <Text style={styles.sectionLabel}>More</Text>
+        <View style={styles.card}>
+          <NavRow icon="chart-bar" label="Adherence Report" onPress={() => navigation.navigate('Report')} />
+          <View style={styles.divider} />
+          <NavRow icon="help-circle-outline" label="Help & About" onPress={() => {
+            Alert.alert('MedScan Help',
+              'MedScan helps you track medications, set reminders, and manage adherence with care groups.\n\n' +
+              'Dashboard: View & log today\'s medicines\n' +
+              'Medicines: View history & manage schedules\n' +
+              'Groups: Share schedules with family/caregivers\n' +
+              'Scan: Add medicines via prescription/strip scan\n\n' +
+              'Need help? Contact: support@medscan.app'
+            );
+          }} />
+        </View>
 
-      {/* Logout */}
-      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-        <Text style={styles.logoutText}>Log Out</Text>
-      </TouchableOpacity>
+        {/* Logout */}
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+          <MaterialCommunityIcons name="logout" size={18} color={colors.danger} />
+          <Text style={styles.logoutText}>Log Out</Text>
+        </TouchableOpacity>
 
-      <Text style={styles.version}>MedScan v1.0.0</Text>
-    </ScrollView>
+        <Text style={styles.version}>MedScan v2.0.0</Text>
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f6f9fc' },
-  content: { padding: 20, paddingBottom: 40 },
+const SettingToggle = ({ icon, label, hint, value, onToggle }) => (
+  <View style={styles.settingRow}>
+    <View style={styles.settingIconBox}>
+      <MaterialCommunityIcons name={icon} size={20} color={colors.primary} />
+    </View>
+    <View style={{ flex: 1 }}>
+      <Text style={styles.settingLabel}>{label}</Text>
+      <Text style={styles.settingHint}>{hint}</Text>
+    </View>
+    <Switch
+      value={value}
+      onValueChange={onToggle}
+      trackColor={{ false: colors.border, true: colors.primaryLight }}
+      thumbColor={value ? colors.primary : colors.textTertiary}
+    />
+  </View>
+);
 
-  avatarSection: { alignItems: 'center', marginBottom: 24, marginTop: 10 },
-  avatar: {
-    width: 80, height: 80, borderRadius: 40,
-    backgroundColor: '#3498db', alignItems: 'center', justifyContent: 'center',
-    marginBottom: 12,
-    shadowColor: '#3498db', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 8, elevation: 6,
+const NavRow = ({ icon, label, onPress }) => (
+  <TouchableOpacity style={styles.navRow} onPress={onPress} activeOpacity={0.6}>
+    <View style={styles.settingIconBox}>
+      <MaterialCommunityIcons name={icon} size={20} color={colors.primary} />
+    </View>
+    <Text style={styles.navLabel}>{label}</Text>
+    <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textTertiary} />
+  </TouchableOpacity>
+);
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { paddingBottom: spacing.section },
+
+  header: {
+    paddingHorizontal: spacing.xl, paddingTop: 50, paddingBottom: spacing.lg,
+    backgroundColor: colors.surface,
   },
-  avatarText: { color: '#fff', fontSize: 32, fontWeight: '700' },
-  displayName: { fontSize: 22, fontWeight: '800', color: '#2c3e50' },
-  role: { fontSize: 13, color: '#7f8c8d', marginTop: 4, textTransform: 'uppercase', letterSpacing: 1 },
-  memberSince: { fontSize: 12, color: '#bdc3c7', marginTop: 4 },
+  title: { ...typography.h1 },
+
+  // User card
+  userCard: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    backgroundColor: colors.surface, marginHorizontal: spacing.lg,
+    marginTop: spacing.md, padding: spacing.lg, borderRadius: radii.xl,
+    ...shadows.sm,
+  },
+  avatar: {
+    width: 48, height: 48, borderRadius: 24,
+    backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center',
+  },
+  avatarText: { color: colors.textInverse, fontSize: 20, fontFamily: fonts.bold },
+  userName: { fontSize: 16, fontFamily: fonts.semiBold, color: colors.text },
+  userEmail: { fontSize: 13, fontFamily: fonts.regular, color: colors.textTertiary, marginTop: 2 },
+
+  // Section
+  sectionLabel: {
+    ...typography.sectionLabel,
+    marginHorizontal: spacing.xl, marginTop: spacing.xxl, marginBottom: spacing.sm,
+  },
 
   card: {
-    backgroundColor: '#fff', borderRadius: 16, padding: 18,
-    marginBottom: 16, elevation: 2,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 4,
+    backgroundColor: colors.surface, marginHorizontal: spacing.lg,
+    borderRadius: radii.xl, ...shadows.sm,
+    overflow: 'hidden',
   },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: '#34495e' },
-  editBtn: { fontSize: 14, fontWeight: '600', color: '#3498db' },
+  divider: { height: 1, backgroundColor: colors.borderLight, marginLeft: 60 },
 
-  field: { marginBottom: 14 },
-  fieldLabel: { fontSize: 12, color: '#95a5a6', fontWeight: '600', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 },
-  fieldValue: { fontSize: 16, color: '#2c3e50', fontWeight: '500' },
-  fieldInput: {
-    borderWidth: 1, borderColor: '#3498db', borderRadius: 8,
-    padding: 10, fontSize: 16, backgroundColor: '#f0f8ff',
+  // Setting toggle
+  settingRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    paddingVertical: spacing.md, paddingHorizontal: spacing.lg,
   },
+  settingIconBox: {
+    width: 36, height: 36, borderRadius: radii.sm,
+    backgroundColor: colors.primaryBg, alignItems: 'center', justifyContent: 'center',
+  },
+  settingLabel: { fontSize: 15, fontFamily: fonts.medium, color: colors.text },
+  settingHint: { fontSize: 12, fontFamily: fonts.regular, color: colors.textTertiary, marginTop: 2 },
 
-  cancelBtn: { alignSelf: 'flex-end', marginTop: 4 },
-  cancelBtnText: { color: '#e74c3c', fontWeight: '600', fontSize: 14 },
-  lockedHint: { fontSize: 11, color: '#bdc3c7', marginTop: 2, fontStyle: 'italic' },
+  // Nav row
+  navRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    paddingVertical: spacing.md + 2, paddingHorizontal: spacing.lg,
+  },
+  navLabel: { flex: 1, fontSize: 15, fontFamily: fonts.medium, color: colors.text },
 
-  settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 },
-  settingLabel: { fontSize: 15, color: '#2c3e50', fontWeight: '500' },
-  settingHint: { fontSize: 11, color: '#95a5a6', marginTop: 2 },
-
-  actionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  actionText: { fontSize: 15, color: '#2c3e50', fontWeight: '500' },
-  actionArrow: { fontSize: 18, color: '#bdc3c7' },
-
+  // Logout
   logoutBtn: {
-    backgroundColor: '#fef2f2', borderRadius: 12,
-    paddingVertical: 14, alignItems: 'center', marginTop: 8,
-    borderWidth: 1, borderColor: '#fee2e2',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
+    marginHorizontal: spacing.lg, marginTop: spacing.xxl,
+    backgroundColor: colors.dangerLight, borderRadius: radii.lg,
+    paddingVertical: spacing.md + 2,
+    borderWidth: 1, borderColor: '#FECACA',
   },
-  logoutText: { color: '#ef4444', fontWeight: '700', fontSize: 16 },
+  logoutText: { color: colors.danger, fontFamily: fonts.bold, fontSize: 15 },
 
-  version: { textAlign: 'center', color: '#bdc3c7', fontSize: 12, marginTop: 16 },
-
-  statsGrid: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
-  statBox: {
-    flex: 1, alignItems: 'center', backgroundColor: '#f8f9fa',
-    paddingVertical: 12, borderRadius: 12, marginHorizontal: 3,
+  version: {
+    textAlign: 'center', fontFamily: fonts.regular,
+    color: colors.textTertiary, fontSize: 12, marginTop: spacing.lg,
   },
-  statValue: { fontSize: 20, fontWeight: '800', color: '#2c3e50' },
-  statLabel: { fontSize: 10, color: '#95a5a6', fontWeight: '600', marginTop: 2, textTransform: 'uppercase' },
 });
 
 export default ProfileScreen;

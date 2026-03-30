@@ -1,15 +1,19 @@
 import React, { useContext, useState, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, RefreshControl, ActivityIndicator, SafeAreaView } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import api from '../api/client';
 import { AuthContext } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
+import { colors, fonts, spacing, radii, shadows, typography, components } from '../theme';
 
-const STATUS_COLORS = { TAKEN: '#27ae60', MISSED: '#e74c3c', SNOOZED: '#f39c12' };
-const STATUS_ICONS = { TAKEN: 'check-circle', MISSED: 'close-circle', SNOOZED: 'clock-outline' };
+const STATUS_CONFIG = {
+  TAKEN:   { color: colors.taken,   icon: 'check-circle',  verb: 'took',    bg: colors.successLight },
+  MISSED:  { color: colors.missed,  icon: 'close-circle',  verb: 'missed',  bg: colors.dangerLight },
+  SNOOZED: { color: colors.snoozed, icon: 'clock-outline', verb: 'snoozed', bg: colors.warningLight },
+};
 const FILTER_OPTIONS = ['All', 'TAKEN', 'MISSED', 'SNOOZED'];
 
-const HistoryScreen = () => {
+const HistoryScreen = ({ navigation }) => {
   const { userInfo } = useContext(AuthContext);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -58,44 +62,66 @@ const HistoryScreen = () => {
 
   const renderItem = (item) => {
     const time = new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const statusColor = STATUS_COLORS[item.status] || '#999';
-    const iconName = STATUS_ICONS[item.status] || 'clipboard-text-outline';
-    const verb = item.status === 'TAKEN' ? 'took' : item.status === 'MISSED' ? 'missed' : 'snoozed';
+    const config = STATUS_CONFIG[item.status] || { color: colors.textTertiary, icon: 'circle', verb: 'recorded', bg: colors.surfaceHover };
 
     return (
-      <View style={styles.messageRow} key={item.id}>
-        <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-        <View style={styles.messageBubble}>
-          <Text style={styles.messageText}>
-            <MaterialCommunityIcons name={iconName} size={14} color={statusColor} /> You {verb} <Text style={styles.medicineName}>{item.medicineName || 'medication'}</Text>
-          </Text>
-          <Text style={styles.messageTime}>{time}</Text>
-          {item.reason && <Text style={styles.messageReason}>{item.reason}</Text>}
+      <View style={styles.timelineItem} key={item.id}>
+        {/* Timeline connector */}
+        <View style={styles.timelineLeft}>
+          <View style={[styles.timelineDot, { backgroundColor: config.color }]}>
+            <MaterialCommunityIcons name={config.icon} size={14} color={colors.textInverse} />
+          </View>
+          <View style={styles.timelineLine} />
+        </View>
+
+        {/* Content card */}
+        <View style={styles.timelineCard}>
+          <View style={styles.timelineCardHeader}>
+            <Text style={styles.medicineName}>{item.medicineName || 'Medication'}</Text>
+            <View style={[styles.statusBadge, { backgroundColor: config.bg }]}>
+              <Text style={[styles.statusText, { color: config.color }]}>{config.verb}</Text>
+            </View>
+          </View>
+          <Text style={styles.timeText}>{time}</Text>
+          {item.reason && <Text style={styles.reasonText}>{item.reason}</Text>}
         </View>
       </View>
     );
   };
 
   if (loading) {
-    return <View style={styles.centered}><ActivityIndicator size="large" color="#3498db" /></View>;
+    return (
+      <SafeAreaView style={styles.centered}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </SafeAreaView>
+    );
   }
 
   if (error && history.length === 0) {
     return (
-      <View style={styles.centered}>
-        <MaterialCommunityIcons name="alert-circle-outline" size={40} color="#7f8c8d" style={{marginBottom: 10}} />
-        <Text style={{fontSize: 16, fontWeight: '600', color: '#2c3e50', marginBottom: 6}}>Failed to Load History</Text>
-        <Text style={{color: '#7f8c8d', marginBottom: 16}}>Check your connection and try again.</Text>
-        <TouchableOpacity style={{backgroundColor: '#3498db', paddingVertical: 10, paddingHorizontal: 24, borderRadius: 8}} onPress={fetchHistory}>
-          <Text style={{color: '#fff', fontWeight: '600'}}>Retry</Text>
+      <SafeAreaView style={styles.centered}>
+        <MaterialCommunityIcons name="alert-circle-outline" size={48} color={colors.textTertiary} />
+        <Text style={styles.errorTitle}>Failed to Load History</Text>
+        <Text style={styles.errorSub}>Check your connection and try again.</Text>
+        <TouchableOpacity style={[components.buttonPrimary, { marginTop: spacing.lg }]} onPress={fetchHistory}>
+          <Text style={[typography.button, { color: colors.textInverse }]}>Retry</Text>
         </TouchableOpacity>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Medication History</Text>
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.title}>Medicines</Text>
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={() => navigation.navigate('AddMedicine')}
+        >
+          <MaterialCommunityIcons name="plus" size={20} color={colors.textInverse} />
+        </TouchableOpacity>
+      </View>
 
       {/* Filter Bar */}
       <View style={styles.filterBar}>
@@ -105,8 +131,11 @@ const HistoryScreen = () => {
             style={[styles.filterBtn, filter === opt && styles.filterBtnActive]}
             onPress={() => setFilter(opt)}
           >
+            {opt !== 'All' && (
+              <View style={[styles.filterDot, { backgroundColor: STATUS_CONFIG[opt]?.color }]} />
+            )}
             <Text style={[styles.filterText, filter === opt && styles.filterTextActive]}>
-              {opt}
+              {opt === 'All' ? 'All' : opt.charAt(0) + opt.slice(1).toLowerCase()}
             </Text>
           </TouchableOpacity>
         ))}
@@ -114,7 +143,11 @@ const HistoryScreen = () => {
 
       {/* Timeline */}
       {sections.length === 0 ? (
-        <Text style={styles.empty}>No history recorded.</Text>
+        <View style={styles.emptyState}>
+          <MaterialCommunityIcons name="clipboard-text-outline" size={48} color={colors.textTertiary} />
+          <Text style={styles.emptyTitle}>No history recorded</Text>
+          <Text style={styles.emptySub}>Your medication activity will appear here</Text>
+        </View>
       ) : (
         <FlatList
           data={sections}
@@ -122,55 +155,109 @@ const HistoryScreen = () => {
           renderItem={({ item }) => (
             <View style={styles.dateSection}>
               <View style={styles.dateBadge}>
+                <MaterialCommunityIcons name="calendar" size={12} color={colors.primary} />
                 <Text style={styles.dateText}>{item[0]}</Text>
               </View>
               {item[1].map(log => renderItem(log))}
             </View>
           )}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          contentContainerStyle={{ paddingBottom: 80 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
+          contentContainerStyle={{ paddingBottom: 100 }}
+          showsVerticalScrollIndicator={false}
         />
       )}
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f6f9fc', padding: 20 },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  title: { fontSize: 24, fontWeight: '800', color: '#2c3e50', marginBottom: 15 },
+  container: { flex: 1, backgroundColor: colors.background },
+  centered: {
+    flex: 1, justifyContent: 'center', alignItems: 'center',
+    backgroundColor: colors.background, padding: spacing.xxl,
+  },
+  errorTitle: { ...typography.h3, marginTop: spacing.md },
+  errorSub: { ...typography.caption, marginTop: spacing.xs },
+
+  // Header
+  header: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: spacing.xl, paddingTop: 50, paddingBottom: spacing.lg,
+    backgroundColor: colors.surface,
+  },
+  title: { ...typography.h1 },
+  addButton: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center',
+    ...shadows.colored(colors.primary),
+  },
 
   // Filters
-  filterBar: { flexDirection: 'row', marginBottom: 15 },
+  filterBar: {
+    flexDirection: 'row', paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md, gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1, borderBottomColor: colors.borderLight,
+  },
   filterBtn: {
-    paddingVertical: 6, paddingHorizontal: 14,
-    borderRadius: 20, backgroundColor: '#ecf0f1', marginRight: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingVertical: spacing.xs + 2, paddingHorizontal: spacing.md,
+    borderRadius: radii.full, backgroundColor: colors.surfaceHover,
   },
-  filterBtnActive: { backgroundColor: '#3498db' },
-  filterText: { fontSize: 13, fontWeight: '600', color: '#7f8c8d' },
-  filterTextActive: { color: '#fff' },
+  filterBtnActive: { backgroundColor: colors.primary },
+  filterDot: { width: 8, height: 8, borderRadius: 4 },
+  filterText: { fontSize: 12, fontFamily: fonts.semiBold, color: colors.textSecondary },
+  filterTextActive: { color: colors.textInverse },
 
-  // Timeline
-  dateSection: { marginBottom: 16 },
+  // Timeline items
+  dateSection: { paddingHorizontal: spacing.xl, marginTop: spacing.lg },
   dateBadge: {
-    backgroundColor: '#ecf0f1', paddingVertical: 4, paddingHorizontal: 12,
-    borderRadius: 12, alignSelf: 'flex-start', marginBottom: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: colors.primaryBg, paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md, borderRadius: radii.full,
+    alignSelf: 'flex-start', marginBottom: spacing.md,
   },
-  dateText: { fontSize: 13, fontWeight: '700', color: '#7f8c8d' },
+  dateText: { fontSize: 12, fontFamily: fonts.bold, color: colors.primary },
 
-  messageRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10, marginLeft: 4 },
-  statusDot: { width: 10, height: 10, borderRadius: 5, marginTop: 8, marginRight: 10 },
-  messageBubble: {
-    flex: 1, backgroundColor: '#fff', padding: 12, borderRadius: 12,
-    elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04, shadowRadius: 3,
+  timelineItem: {
+    flexDirection: 'row', marginBottom: spacing.xs,
   },
-  messageText: { fontSize: 14, color: '#2c3e50' },
-  medicineName: { fontWeight: '700', color: '#3498db' },
-  messageTime: { fontSize: 11, color: '#bdc3c7', marginTop: 4 },
-  messageReason: { fontSize: 12, color: '#95a5a6', marginTop: 2, fontStyle: 'italic' },
+  timelineLeft: {
+    width: 28, alignItems: 'center',
+  },
+  timelineDot: {
+    width: 24, height: 24, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  timelineLine: {
+    flex: 1, width: 2, backgroundColor: colors.border,
+    marginVertical: 2,
+  },
 
-  empty: { fontSize: 15, color: '#95a5a6', textAlign: 'center', marginTop: 40 },
+  timelineCard: {
+    flex: 1, marginLeft: spacing.sm,
+    backgroundColor: colors.surface, borderRadius: radii.md,
+    padding: spacing.md, marginBottom: spacing.sm,
+    ...shadows.sm,
+  },
+  timelineCardHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+  },
+  medicineName: { fontSize: 14, fontFamily: fonts.semiBold, color: colors.text, flex: 1 },
+  statusBadge: {
+    paddingHorizontal: spacing.sm, paddingVertical: 2,
+    borderRadius: radii.full,
+  },
+  statusText: { fontSize: 11, fontFamily: fonts.bold },
+  timeText: { fontSize: 12, fontFamily: fonts.regular, color: colors.textTertiary, marginTop: 4 },
+  reasonText: { fontSize: 12, fontFamily: fonts.regular, color: colors.textSecondary, marginTop: 4, fontStyle: 'italic' },
+
+  // Empty state
+  emptyState: {
+    flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xxl,
+  },
+  emptyTitle: { ...typography.bodySemiBold, color: colors.textSecondary, marginTop: spacing.md },
+  emptySub: { ...typography.caption, marginTop: spacing.xs },
 });
 
 export default HistoryScreen;

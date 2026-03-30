@@ -6,7 +6,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import api from '../api/client';
 import { AuthContext } from '../context/AuthContext';
-
+import { colors, fonts, spacing, radii, shadows, typography } from '../theme';
 const AddGroupScreen = ({ navigation }) => {
   const { userInfo } = useContext(AuthContext);
   const [name, setName] = useState('');
@@ -128,49 +128,45 @@ const AddGroupScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f6f9fc' },
-  content: { flex: 1, padding: 24, paddingTop: 20 },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { flex: 1, padding: spacing.xxl, paddingTop: spacing.xl },
 
   iconCircle: {
-    width: 80, height: 80, borderRadius: 40, backgroundColor: '#e0f2fe',
+    width: 80, height: 80, borderRadius: 40, backgroundColor: colors.primaryBg,
     alignItems: 'center', justifyContent: 'center', alignSelf: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   title: {
-    fontSize: 22, fontWeight: '800', color: '#1e293b', textAlign: 'center',
-    marginBottom: 6,
+    fontSize: 22, fontFamily: fonts.bold, color: colors.text, textAlign: 'center',
+    marginBottom: spacing.xs,
   },
   subtitle: {
-    fontSize: 13, color: '#94a3b8', textAlign: 'center', lineHeight: 19,
-    marginBottom: 28, paddingHorizontal: 10,
+    fontSize: 13, fontFamily: fonts.regular, color: colors.textTertiary, textAlign: 'center', lineHeight: 19,
+    marginBottom: spacing.xxl, paddingHorizontal: spacing.sm,
   },
 
-  label: {
-    fontSize: 11, fontWeight: '700', color: '#64748b', letterSpacing: 0.8,
-    marginBottom: 6, marginTop: 16,
-  },
+  label: { ...typography.sectionLabel, marginBottom: spacing.xs, marginTop: spacing.lg },
   input: {
-    backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e2e8f0',
-    borderRadius: 12, padding: 14, fontSize: 16, color: '#1e293b',
+    backgroundColor: colors.surfaceHover, borderWidth: 0,
+    borderRadius: radii.md, padding: spacing.md, fontSize: 16, fontFamily: fonts.regular, color: colors.text,
   },
   textArea: { height: 80, textAlignVertical: 'top' },
-  charCount: { fontSize: 11, color: '#94a3b8', textAlign: 'right', marginTop: 4 },
+  charCount: { fontSize: 11, fontFamily: fonts.regular, color: colors.textTertiary, textAlign: 'right', marginTop: 4 },
 
   infoRow: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
-    backgroundColor: '#f0f9ff', padding: 12, borderRadius: 10,
-    marginTop: 24, borderWidth: 1, borderColor: '#bae6fd',
+    flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm,
+    backgroundColor: colors.primaryBg, padding: spacing.md, borderRadius: radii.md,
+    marginTop: spacing.xxl,
   },
   infoIcon: { fontSize: 14, marginTop: 1 },
-  infoText: { flex: 1, fontSize: 12, color: '#0369a1', lineHeight: 18 },
+  infoText: { flex: 1, fontSize: 12, fontFamily: fonts.medium, color: colors.primary, lineHeight: 18 },
 
   createBtn: {
-    backgroundColor: '#2563eb', paddingVertical: 16, borderRadius: 14,
-    alignItems: 'center', marginTop: 28,
-    elevation: 4, shadowColor: '#2563eb',
-    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8,
+    backgroundColor: colors.primary, paddingVertical: spacing.lg, borderRadius: radii.lg,
+    alignItems: 'center', marginTop: spacing.xxl,
+    ...shadows.colored(colors.primary),
   },
-  createBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  createBtnText: { color: colors.textInverse, fontSize: 17, fontFamily: fonts.bold },
 });
 
 export default AddGroupScreen;

@@ -1,15 +1,22 @@
-import React, { useState, useCallback, useContext, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
+import React, { useState, useCallback, useContext, useEffect, useMemo } from 'react';
+import {
+  View, Text, StyleSheet, ScrollView, RefreshControl,
+  ActivityIndicator, TouchableOpacity, Alert, SafeAreaView,
+} from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import api from '../api/client';
 import { AuthContext } from '../context/AuthContext';
 import MedicationItem from '../components/MedicationItem';
-import AdherenceChart from '../components/AdherenceChart';
+import CircularProgress from '../components/CircularProgress';
+import WeekStrip from '../components/WeekStrip';
+import StockRing from '../components/StockRing';
+import { useToast } from '../components/Toast';
 import offlineSyncService from '../services/OfflineSyncService';
+import { colors, fonts, spacing, radii, shadows, typography, components } from '../theme';
 
-// B1: Track which bundles are collapsed
+// Track which bundles are collapsed (persists during session)
 let collapsedBundlesState = {};
 
 const formatCacheAge = (isoString) => {
@@ -22,8 +29,16 @@ const formatCacheAge = (isoString) => {
   return `${Math.floor(hrs / 24)}d ago`;
 };
 
+const FILTER_OPTIONS = [
+  { key: 'all', label: 'All' },
+  { key: 'pending', label: 'Pending' },
+  { key: 'taken', label: 'Taken' },
+  { key: 'missed', label: 'Missed' },
+];
+
 const DashboardScreen = ({ navigation }) => {
   const { userInfo } = useContext(AuthContext);
+  const toast = useToast();
 
   const [schedules, setSchedules] = useState([]);
   const [stats, setStats] = useState(null);
@@ -36,6 +51,9 @@ const DashboardScreen = ({ navigation }) => {
   const [isOnline, setIsOnline] = useState(true);
   const [cachedAt, setCachedAt] = useState(null);
   const [isFromCache, setIsFromCache] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [activeFilter, setActiveFilter] = useState('all');
+  const [chartMode, setChartMode] = useState('week'); // 'week' or 'month'
 
   useEffect(() => {
     const unsub = offlineSyncService.subscribe(status => {
@@ -62,18 +80,16 @@ const DashboardScreen = ({ navigation }) => {
       setSchedules(schedData);
       setStats(statsRes.data);
 
-      // Track low stock items
       const lowStock = schedData.filter(s => s.currentStock != null && s.currentStock <= 5);
       setLowStockItems(lowStock);
 
-      // Track already-logged schedules for today
       const logged = new Set();
       if (statsRes.data?.todayLogs) {
         statsRes.data.todayLogs.forEach(log => logged.add(log.scheduleId));
       }
       setLoggedSchedules(logged);
 
-      // Cache to AsyncStorage
+      // Cache
       const cacheData = {
         schedules: schedData,
         stats: statsRes.data,
@@ -83,11 +99,11 @@ const DashboardScreen = ({ navigation }) => {
       AsyncStorage.setItem('dashboard_cache', JSON.stringify(cacheData)).catch(() => {});
       setCachedAt(null);
     } catch (e) {
-        console.error('[Dashboard] Fetch failed:', e.message);
-        setError(true);
-        await loadFromCache();
+      console.error('[Dashboard] Fetch failed:', e.message);
+      setError(true);
+      await loadFromCache();
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   };
 
@@ -100,17 +116,14 @@ const DashboardScreen = ({ navigation }) => {
         setStats(data.stats || null);
         setCachedAt(data.lastUpdated);
         setIsFromCache(true);
-
         const lowStock = (data.schedules || []).filter(s => s.currentStock != null && s.currentStock <= 5);
         setLowStockItems(lowStock);
-
         const logged = new Set();
         if (data.stats?.todayLogs) {
           data.stats.todayLogs.forEach(log => logged.add(log.scheduleId));
         }
         setLoggedSchedules(logged);
         setError(false);
-        console.log('[Dashboard] Loaded from cache, last updated:', data.lastUpdated);
       }
     } catch (e) {
       console.log('[Dashboard] Cache load failed:', e.message);
@@ -119,7 +132,7 @@ const DashboardScreen = ({ navigation }) => {
 
   useFocusEffect(
     useCallback(() => {
-        fetchData();
+      fetchData();
     }, [])
   );
 
@@ -129,26 +142,24 @@ const DashboardScreen = ({ navigation }) => {
     setRefreshing(false);
   };
 
+  // ─── Dose Actions ──────────────────────────────────────────────
   const handleTakeDose = async (scheduleId) => {
     try {
-        const result = await offlineSyncService.safePost('/adherence/log', {
-            scheduleId,
-            userId: userInfo.id,
-            status: 'TAKEN',
-            timestamp: new Date().toISOString()
-        });
-        if (result.queued) {
-          Alert.alert("Saved Offline", "Dose will be synced when you're back online.");
-        } else if (result.data?.metadata === 'ALREADY_LOGGED') {
-          Alert.alert("Already Recorded", "This dose was already logged today.");
-        } else {
-          Alert.alert("Great Job!", "Dose recorded as Taken.");
-        }
-        setLoggedSchedules(prev => new Set([...prev, scheduleId]));
-        fetchData(); 
+      const result = await offlineSyncService.safePost('/adherence/log', {
+        scheduleId, userId: userInfo.id, status: 'TAKEN', timestamp: new Date().toISOString()
+      });
+      if (result.queued) {
+        toast.info('Dose saved offline. Will sync when back online.');
+      } else if (result.data?.metadata === 'ALREADY_LOGGED') {
+        toast.warning('This dose was already logged today.');
+      } else {
+        toast.success('Dose recorded as taken.');
+      }
+      setLoggedSchedules(prev => new Set([...prev, scheduleId]));
+      fetchData();
     } catch (e) {
-        console.error(e);
-        Alert.alert("Error", "Failed to record dose.");
+      console.error(e);
+      toast.error('Failed to record dose.');
     }
   };
 
@@ -159,28 +170,23 @@ const DashboardScreen = ({ navigation }) => {
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Yes, Missed",
-          style: "destructive",
+          text: "Yes, Missed", style: "destructive",
           onPress: async () => {
             try {
               const result = await offlineSyncService.safePost('/adherence/log', {
-                scheduleId,
-                userId: userInfo.id,
-                status: 'MISSED',
-                timestamp: new Date().toISOString()
+                scheduleId, userId: userInfo.id, status: 'MISSED', timestamp: new Date().toISOString()
               });
               if (result.queued) {
-                Alert.alert("Saved Offline", "Will sync when online.");
+                toast.info('Saved offline. Will sync when online.');
               } else if (result.data?.metadata === 'ALREADY_LOGGED') {
-                Alert.alert("Already Recorded", "This dose was already logged today.");
+                toast.warning('This dose was already logged today.');
               } else {
-                Alert.alert("Recorded", "Dose marked as missed.");
+                toast.info('Dose marked as missed.');
               }
               setLoggedSchedules(prev => new Set([...prev, scheduleId]));
               fetchData();
             } catch (e) {
-              console.error(e);
-              Alert.alert("Error", "Failed to record.");
+              toast.error('Failed to record.');
             }
           }
         }
@@ -191,50 +197,37 @@ const DashboardScreen = ({ navigation }) => {
   const handleSnooze = async (scheduleId) => {
     try {
       const result = await offlineSyncService.safePost('/adherence/log', {
-        scheduleId,
-        userId: userInfo.id,
-        status: 'SNOOZED',
-        timestamp: new Date().toISOString()
+        scheduleId, userId: userInfo.id, status: 'SNOOZED', timestamp: new Date().toISOString()
       });
       if (result.data?.metadata === 'ALREADY_LOGGED') {
-        Alert.alert("Already Recorded", "This dose was already logged today.");
+        toast.warning('This dose was already logged today.');
       } else {
-        Alert.alert("Snoozed", "We'll remind you again later.");
+        toast.info('Snoozed. We will remind you later.');
       }
       setSnoozedSchedules(prev => new Set([...prev, scheduleId]));
       fetchData();
     } catch (e) {
-      console.error(e);
-      Alert.alert("Error", "Failed to snooze.");
+      toast.error('Failed to snooze.');
     }
   };
 
-  const handleUndo = async (scheduleId) => {
+  const handleUndo = (scheduleId) => {
     Alert.alert(
       "Undo Status",
       "This will remove today's recorded status for this medicine. Continue?",
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Undo",
-          style: "destructive",
+          text: "Undo", style: "destructive",
           onPress: async () => {
             try {
               await api.delete(`/adherence/undo?userId=${userInfo.id}&scheduleId=${scheduleId}`);
-              setLoggedSchedules(prev => {
-                const next = new Set(prev);
-                next.delete(scheduleId);
-                return next;
-              });
-              setSnoozedSchedules(prev => {
-                const next = new Set(prev);
-                next.delete(scheduleId);
-                return next;
-              });
-              Alert.alert("Undone", "Status has been reset. You can re-record it.");
+              setLoggedSchedules(prev => { const n = new Set(prev); n.delete(scheduleId); return n; });
+              setSnoozedSchedules(prev => { const n = new Set(prev); n.delete(scheduleId); return n; });
+              toast.success('Status has been reset.');
               fetchData();
             } catch (e) {
-              Alert.alert("Error", e.response?.data?.message || "Failed to undo.");
+              toast.error(e.response?.data?.message || 'Failed to undo.');
             }
           }
         }
@@ -242,316 +235,493 @@ const DashboardScreen = ({ navigation }) => {
     );
   };
 
+  // ─── Computed Values ───────────────────────────────────────────
+  const todayISO = new Date().toISOString().split('T')[0];
+  const selectedISO = selectedDate.toISOString().split('T')[0];
+  const isToday = todayISO === selectedISO;
+
+  const todayTaken = stats?.takenCount || 0;
+  const todayTotal = (stats?.takenCount || 0) + (stats?.missedCount || 0) + (stats?.snoozedCount || 0);
+  const todayProgress = todayTotal > 0 ? todayTaken / todayTotal : 0;
+
+  // Weekly adherence from dailyBreakdown
+  const weeklyStats = useMemo(() => {
+    const breakdown = stats?.dailyBreakdown || [];
+    const last7 = breakdown.slice(-7);
+    let taken = 0, total = 0;
+    last7.forEach(d => {
+      taken += d.taken || 0;
+      total += (d.taken || 0) + (d.missed || 0) + (d.snoozed || 0);
+    });
+    return { taken, total, progress: total > 0 ? taken / total : 0 };
+  }, [stats?.dailyBreakdown]);
+
+  // Monthly adherence (use all breakdown data)
+  const monthlyStats = useMemo(() => {
+    const breakdown = stats?.dailyBreakdown || [];
+    let taken = 0, total = 0;
+    breakdown.forEach(d => {
+      taken += d.taken || 0;
+      total += (d.taken || 0) + (d.missed || 0) + (d.snoozed || 0);
+    });
+    return { taken, total, progress: total > 0 ? taken / total : 0 };
+  }, [stats?.dailyBreakdown]);
+
+  const currentPeriodStats = chartMode === 'week' ? weeklyStats : monthlyStats;
+
+  // Marked dates (dates with schedules)
+  const markedDates = useMemo(() => {
+    const set = new Set();
+    set.add(todayISO); // Today always marked
+    return set;
+  }, [todayISO]);
+
+  // Filter schedules
+  const filteredSchedules = useMemo(() => {
+    let list = Array.isArray(schedules) ? schedules : [];
+    if (activeFilter === 'pending') {
+      list = list.filter(s => !loggedSchedules.has(s.id));
+    } else if (activeFilter === 'taken') {
+      list = list.filter(s => loggedSchedules.has(s.id) && !snoozedSchedules.has(s.id));
+    } else if (activeFilter === 'missed') {
+      // We show missed by looking at logged + status
+      list = list.filter(s => loggedSchedules.has(s.id));
+    }
+    return list;
+  }, [schedules, activeFilter, loggedSchedules, snoozedSchedules]);
+
+  // ─── Loading State ─────────────────────────────────────────────
   if (loading) {
-     return <View style={styles.centered}><ActivityIndicator size="large" color="#4a90e2" /></View>;
+    return (
+      <SafeAreaView style={styles.centered}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </SafeAreaView>
+    );
   }
 
   if (error && schedules.length === 0) {
     return (
-      <View style={styles.centered}>
-        <Text style={{fontSize: 40, marginBottom: 10}}><MaterialCommunityIcons name="access-point-network" size={40} color="#7f8c8d" /></Text>
-        <Text style={{fontSize: 16, fontWeight: '600', color: '#2c3e50', marginBottom: 6}}>Could Not Load Data</Text>
-        <Text style={{color: '#7f8c8d', marginBottom: 16, textAlign: 'center'}}>Check your internet connection and make sure the server is running.</Text>
-        <TouchableOpacity style={{backgroundColor: '#4a90e2', paddingVertical: 10, paddingHorizontal: 24, borderRadius: 8}} onPress={fetchData}>
-          <Text style={{color: '#fff', fontWeight: '600'}}>Retry</Text>
+      <SafeAreaView style={styles.centered}>
+        <MaterialCommunityIcons name="wifi-off" size={48} color={colors.textTertiary} />
+        <Text style={styles.errorTitle}>Could Not Load Data</Text>
+        <Text style={styles.errorSubtext}>Check your internet connection and make sure the server is running.</Text>
+        <TouchableOpacity style={[components.buttonPrimary, { marginTop: spacing.lg }]} onPress={fetchData}>
+          <Text style={[typography.button, { color: colors.textInverse }]}>Retry</Text>
         </TouchableOpacity>
-      </View>
+      </SafeAreaView>
     );
   }
 
-  const getAdherenceColor = (rate) => {
-      if (rate >= 80) return '#2ecc71'; 
-      if (rate >= 50) return '#f1c40f'; 
-      return '#e74c3c'; 
-  };
+  // ─── Bundle Grouping ───────────────────────────────────────────
+  const bundled = {};
+  const standalone = [];
+  filteredSchedules.forEach(item => {
+    if (item.bundleName) {
+      if (!bundled[item.bundleName]) bundled[item.bundleName] = [];
+      bundled[item.bundleName].push(item);
+    } else {
+      standalone.push(item);
+    }
+  });
+  const bundleNames = Object.keys(bundled);
 
   return (
-    <View style={styles.container}>
-      <ScrollView 
-        refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
+    <SafeAreaView style={styles.container}>
+      <ScrollView
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
         contentContainerStyle={{ paddingBottom: 100 }}
+        showsVerticalScrollIndicator={false}
       >
+        {/* ── Header ──────────────────────────────────────────── */}
         <View style={styles.header}>
-            <View>
-                <Text style={styles.welcomeLabel}>Welcome Back,</Text>
-                <Text style={styles.username}>{userInfo.fullName || userInfo.username}</Text>
-            </View>
+          <View>
+            <Text style={styles.welcomeLabel}>Welcome Back,</Text>
+            <Text style={styles.username}>{userInfo.fullName || userInfo.username}</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.headerAction}
+            onPress={() => navigation.navigate('ScanPrescription')}
+          >
+            <MaterialCommunityIcons name="line-scan" size={22} color={colors.primary} />
+          </TouchableOpacity>
         </View>
 
-        {/* Offline / Cache banners — compact, non-overlapping */}
+        {/* ── Banners ─────────────────────────────────────────── */}
         {!isOnline && (
           <View style={styles.offlineBanner}>
-            <Text style={styles.offlineBannerText}><MaterialCommunityIcons name="access-point-network-off" size={13} color="#c0392b" /> Offline — actions saved locally</Text>
+            <MaterialCommunityIcons name="wifi-off" size={14} color={colors.danger} />
+            <Text style={styles.bannerText}>Offline — actions saved locally</Text>
           </View>
         )}
         {isFromCache && cachedAt && (
           <View style={styles.cacheBanner}>
-            <Text style={styles.cacheBannerText}><MaterialCommunityIcons name="package-variant" size={12} color="#e67e22" /> Cached data — {formatCacheAge(cachedAt)}</Text>
+            <MaterialCommunityIcons name="database-outline" size={14} color={colors.warning} />
+            <Text style={[styles.bannerText, { color: colors.warningDark }]}>Cached data — {formatCacheAge(cachedAt)}</Text>
           </View>
         )}
 
-        {/* Low Stock Alert */}
-        {lowStockItems.length > 0 && (
-            <View style={styles.alertCard}>
-                <Text style={styles.alertTitle}><MaterialCommunityIcons name="alert-outline" size={16} color="#e67e22" /> Restock Needed</Text>
-                {lowStockItems.map(item => (
-                    <Text key={item.id} style={styles.alertText}>
-                        • {item.medicine ? item.medicine.name : 'Medication'} is running low ({item.currentStock} left)
-                    </Text>
-                ))}
+        {/* ── Dual Circular Charts ────────────────────────────── */}
+        <View style={styles.chartsRow}>
+          {/* Today's Progress */}
+          <View style={styles.chartCard}>
+            <Text style={styles.chartLabel}>Today</Text>
+            <CircularProgress
+              size={110}
+              strokeWidth={10}
+              progress={todayProgress}
+              label={`${todayTaken}/${todayTotal || schedules.length}`}
+              sublabel="doses"
+            />
+            <View style={styles.chartStatsRow}>
+              <View style={styles.miniStat}>
+                <View style={[styles.miniDot, { backgroundColor: colors.taken }]} />
+                <Text style={styles.miniStatText}>{stats?.takenCount || 0}</Text>
+              </View>
+              <View style={styles.miniStat}>
+                <View style={[styles.miniDot, { backgroundColor: colors.missed }]} />
+                <Text style={styles.miniStatText}>{stats?.missedCount || 0}</Text>
+              </View>
+              <View style={styles.miniStat}>
+                <View style={[styles.miniDot, { backgroundColor: colors.snoozed }]} />
+                <Text style={styles.miniStatText}>{stats?.snoozedCount || 0}</Text>
+              </View>
             </View>
-        )}
-        
-        {/* ===== STATS & CHART — below schedules ===== */}
-        {stats && (
-            <View style={styles.statsCompact}>
-                <View style={styles.statsRow}>
-                    <View style={styles.statPill}>
-                        <Text style={[styles.statPillValue, { color: getAdherenceColor(stats.adherenceRate || 0) }]}>
-                            {stats.adherenceRate || 0}%
-                        </Text>
-                        <Text style={styles.statPillLabel}>Adherence</Text>
-                    </View>
-                    <View style={styles.statPill}>
-                        <Text style={styles.statPillValue}>{stats.takenCount || 0}</Text>
-                        <Text style={styles.statPillLabel}>Taken</Text>
-                    </View>
-                    <View style={styles.statPill}>
-                        <Text style={styles.statPillValue}>{stats.snoozedCount || 0}</Text>
-                        <Text style={styles.statPillLabel}>Snoozed</Text>
-                    </View>
-                    <View style={styles.statPill}>
-                        <Text style={styles.statPillValue}>{stats.missedCount || 0}</Text>
-                        <Text style={styles.statPillLabel}>Missed</Text>
-                    </View>
-                </View>
+          </View>
+
+          {/* Period Progress */}
+          <View style={styles.chartCard}>
+            <View style={styles.periodToggle}>
+              <TouchableOpacity onPress={() => setChartMode('week')}>
+                <Text style={[styles.periodBtn, chartMode === 'week' && styles.periodBtnActive]}>Week</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setChartMode('month')}>
+                <Text style={[styles.periodBtn, chartMode === 'month' && styles.periodBtnActive]}>Month</Text>
+              </TouchableOpacity>
             </View>
-        )}
-
-        {/* Weekly Chart */}
-        <AdherenceChart dailyBreakdown={stats?.dailyBreakdown} />
-
-        {/* ===== SCHEDULES FIRST — the primary content ===== */}
-        <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Today's Schedule</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('ScanPrescription')}>
-                <Text style={styles.scanLink}><MaterialCommunityIcons name="camera-outline" size={14} color="#3498db" /> Scan</Text>
-            </TouchableOpacity>
+            <CircularProgress
+              size={110}
+              strokeWidth={10}
+              progress={currentPeriodStats.progress}
+              label={`${Math.round(currentPeriodStats.progress * 100)}%`}
+              sublabel="adherence"
+            />
+            <Text style={styles.periodDetail}>
+              {currentPeriodStats.taken}/{currentPeriodStats.total} doses
+            </Text>
+          </View>
         </View>
-        
-        {schedules.length === 0 ? (
-           <View style={styles.emptyContainer}>
-               <MaterialCommunityIcons name="pill" size={48} color="#95a5a6" style={{marginBottom: 12}} />
-               <Text style={styles.emptyText}>No medications scheduled yet</Text>
-               <Text style={styles.emptySubtext}>Add your first medicine to start tracking</Text>
-               <TouchableOpacity style={styles.addMedBtn} onPress={() => navigation.navigate('AddMedicine')}>
-                   <Text style={styles.addMedText}>+ Add Medication</Text>
-               </TouchableOpacity>
-           </View>
-        ) : (() => {
-            // B3: Group schedules by bundle
-            const bundled = {};
-            const standalone = [];
-            (Array.isArray(schedules) ? schedules : []).forEach(item => {
-              if (item.bundleName) {
-                if (!bundled[item.bundleName]) bundled[item.bundleName] = [];
-                bundled[item.bundleName].push(item);
-              } else {
-                standalone.push(item);
-              }
-            });
-            const bundleNames = Object.keys(bundled);
 
-            return (
-            <View style={styles.listContainer}>
-                {/* Bundled medicines */}
-                {bundleNames.map(bName => {
-                  const items = bundled[bName];
-                  const takenCount = items.filter(i => loggedSchedules.has(i.id)).length;
-                  const isCollapsed = collapsedBundlesState[bName];
-                  return (
-                  <View key={bName} style={styles.bundleSection}>
-                    <TouchableOpacity
-                      style={styles.bundleHeader}
-                      activeOpacity={0.7}
-                      onPress={() => {
-                        collapsedBundlesState = { ...collapsedBundlesState, [bName]: !isCollapsed };
-                        // Force re-render
-                        setSchedules([...schedules]);
-                      }}
-                    >
-                      <Text style={styles.bundleTitle}><MaterialCommunityIcons name="package-variant" size={14} color="#3b82f6" /> {bName}</Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <Text style={[
-                          styles.bundleCount,
-                          takenCount === items.length && { color: '#27ae60' },
-                        ]}>
-                          {takenCount}/{items.length} taken
-                        </Text>
-                        <Text style={{ fontSize: 14, color: '#95a5a6' }}>{isCollapsed ? '▸' : '▾'}</Text>
-                      </View>
-                    </TouchableOpacity>
-                    {!isCollapsed && items.map(item => (
-                      <MedicationItem 
-                        key={item.id} 
-                        schedule={item} 
-                        onTaken={() => handleTakeDose(item.id)} 
-                        onMissed={() => handleMissDose(item.id)}
-                        onSnooze={() => handleSnooze(item.id)}
-                        onUndo={() => handleUndo(item.id)}
-                        onPress={() => navigation.navigate('MedicineDetail', { schedule: item })} 
-                        loggedToday={loggedSchedules.has(item.id)}
-                        snoozedToday={snoozedSchedules.has(item.id)}
+        {/* ── Low Stock Alert ─────────────────────────────────── */}
+        {lowStockItems.length > 0 && (
+          <View style={styles.alertCard}>
+            <View style={styles.alertHeader}>
+              <MaterialCommunityIcons name="alert-outline" size={18} color={colors.warningDark} />
+              <Text style={styles.alertTitle}>Restock Needed</Text>
+            </View>
+            {lowStockItems.map(item => (
+              <Text key={item.id} style={styles.alertText}>
+                {item.medicine ? item.medicine.name : 'Medication'} — {item.currentStock} left
+              </Text>
+            ))}
+          </View>
+        )}
+
+        {/* ── Week Strip Calendar ─────────────────────────────── */}
+        <WeekStrip
+          selectedDate={selectedDate}
+          onSelectDate={setSelectedDate}
+          markedDates={markedDates}
+        />
+
+        {/* ── Filter Chips ────────────────────────────────────── */}
+        <View style={styles.filterRow}>
+          {FILTER_OPTIONS.map(f => (
+            <TouchableOpacity
+              key={f.key}
+              style={[styles.filterChip, activeFilter === f.key && styles.filterChipActive]}
+              onPress={() => setActiveFilter(f.key)}
+            >
+              <Text style={[styles.filterText, activeFilter === f.key && styles.filterTextActive]}>
+                {f.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* ── Section Header ──────────────────────────────────── */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>
+            {isToday ? "Today's Schedule" : selectedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+          </Text>
+          <Text style={styles.scheduleCount}>{filteredSchedules.length} items</Text>
+        </View>
+
+        {/* ── Schedule List ────────────────────────────────────── */}
+        {filteredSchedules.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <MaterialCommunityIcons name="pill" size={48} color={colors.textTertiary} style={{ marginBottom: spacing.md }} />
+            <Text style={styles.emptyText}>
+              {schedules.length === 0
+                ? 'No medications scheduled yet'
+                : `No ${activeFilter !== 'all' ? activeFilter : ''} medications`}
+            </Text>
+            <Text style={styles.emptySubtext}>
+              {schedules.length === 0
+                ? 'Add your first medicine to start tracking'
+                : 'Try a different filter'}
+            </Text>
+            {schedules.length === 0 && (
+              <TouchableOpacity
+                style={[components.buttonPrimary, { marginTop: spacing.xl }]}
+                onPress={() => navigation.navigate('AddMedicine')}
+              >
+                <Text style={[typography.button, { color: colors.textInverse }]}>Add Medication</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : (
+          <View style={styles.listContainer}>
+            {/* Bundled medicines */}
+            {bundleNames.map(bName => {
+              const items = bundled[bName];
+              const takenCount = items.filter(i => loggedSchedules.has(i.id)).length;
+              const isCollapsed = collapsedBundlesState[bName];
+              return (
+                <View key={bName} style={styles.bundleSection}>
+                  <TouchableOpacity
+                    style={styles.bundleHeader}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      collapsedBundlesState = { ...collapsedBundlesState, [bName]: !isCollapsed };
+                      setSchedules([...schedules]);
+                    }}
+                  >
+                    <View style={styles.bundleTitleRow}>
+                      <MaterialCommunityIcons name="package-variant" size={16} color={colors.primary} />
+                      <Text style={styles.bundleTitle}>{bName}</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={[
+                        styles.bundleCount,
+                        takenCount === items.length && { color: colors.success },
+                      ]}>
+                        {takenCount}/{items.length}
+                      </Text>
+                      <MaterialCommunityIcons
+                        name={isCollapsed ? 'chevron-right' : 'chevron-down'}
+                        size={18}
+                        color={colors.textTertiary}
                       />
-                    ))}
-                  </View>
-                  );
-                })}
-
-                {/* Standalone medicines (no bundle) */}
-                {standalone.map(item => (
-                    <MedicationItem 
-                      key={item.id} 
-                      schedule={item} 
-                      onTaken={() => handleTakeDose(item.id)} 
+                    </View>
+                  </TouchableOpacity>
+                  {!isCollapsed && items.map(item => (
+                    <MedicationItem
+                      key={item.id}
+                      schedule={item}
+                      onTaken={() => handleTakeDose(item.id)}
                       onMissed={() => handleMissDose(item.id)}
                       onSnooze={() => handleSnooze(item.id)}
                       onUndo={() => handleUndo(item.id)}
-                      onPress={() => navigation.navigate('MedicineDetail', { schedule: item })} 
+                      onPress={() => navigation.navigate('MedicineDetail', { schedule: item })}
                       loggedToday={loggedSchedules.has(item.id)}
                       snoozedToday={snoozedSchedules.has(item.id)}
                     />
-                ))}
-            </View>
-            );
-        })()}
+                  ))}
+                </View>
+              );
+            })}
 
-
+            {/* Standalone medicines */}
+            {standalone.map(item => (
+              <MedicationItem
+                key={item.id}
+                schedule={item}
+                onTaken={() => handleTakeDose(item.id)}
+                onMissed={() => handleMissDose(item.id)}
+                onSnooze={() => handleSnooze(item.id)}
+                onUndo={() => handleUndo(item.id)}
+                onPress={() => navigation.navigate('MedicineDetail', { schedule: item })}
+                loggedToday={loggedSchedules.has(item.id)}
+                snoozedToday={snoozedSchedules.has(item.id)}
+              />
+            ))}
+          </View>
+        )}
       </ScrollView>
 
-      {/* Floating Add Button — visible only when there are schedules */}
+      {/* FAB — Add Medicine */}
       {schedules.length > 0 && (
         <TouchableOpacity
           style={styles.fab}
           onPress={() => navigation.navigate('AddMedicine')}
           activeOpacity={0.8}
         >
-          <Text style={styles.fabText}>+</Text>
+          <MaterialCommunityIcons name="plus" size={26} color={colors.textInverse} />
         </TouchableOpacity>
       )}
-    </View>
+    </SafeAreaView>
   );
 };
 
+// ─────────────────────────────────────────────────────────────────
+// Styles
+// ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f6f9fc' },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f6f9fc' },
+  container: { flex: 1, backgroundColor: colors.background },
+  centered: {
+    flex: 1, justifyContent: 'center', alignItems: 'center',
+    backgroundColor: colors.background, padding: spacing.xxl,
+  },
+  errorTitle: { ...typography.h3, marginTop: spacing.md, marginBottom: spacing.xs },
+  errorSubtext: { ...typography.caption, textAlign: 'center', marginBottom: spacing.lg },
+
+  // Header
   header: {
-    padding: 25, paddingTop: 50, backgroundColor: '#ffffff',
-    borderBottomLeftRadius: 24, borderBottomRightRadius: 24,
-    marginBottom: 12,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05, shadowRadius: 8, elevation: 3,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: spacing.xl, paddingTop: 50, paddingBottom: spacing.xl,
+    backgroundColor: colors.surface,
+    borderBottomLeftRadius: radii.xxl, borderBottomRightRadius: radii.xxl,
+    ...shadows.sm,
   },
-  welcomeLabel: { color: '#95a5a6', fontSize: 14, fontWeight: '500' },
-  username: { fontSize: 22, fontWeight: '800', color: '#2c3e50', marginTop: 2 },
+  welcomeLabel: { ...typography.caption, color: colors.textTertiary },
+  username: { ...typography.h2, marginTop: 2 },
+  headerAction: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: colors.primaryBg, alignItems: 'center', justifyContent: 'center',
+  },
 
-  // Compact banners — inside ScrollView, small text, no overlap
+  // Banners
   offlineBanner: {
-    backgroundColor: '#fef2f2', marginHorizontal: 16, marginBottom: 8,
-    paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10,
-    borderLeftWidth: 3, borderLeftColor: '#e74c3c',
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: colors.dangerLight, marginHorizontal: spacing.lg, marginTop: spacing.sm,
+    paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.sm,
+    borderLeftWidth: 3, borderLeftColor: colors.danger,
   },
-  offlineBannerText: { fontSize: 12, fontWeight: '600', color: '#c0392b' },
   cacheBanner: {
-    backgroundColor: '#fffbeb', marginHorizontal: 16, marginBottom: 8,
-    paddingVertical: 6, paddingHorizontal: 14, borderRadius: 10,
-    borderLeftWidth: 3, borderLeftColor: '#f39c12',
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: colors.warningLight, marginHorizontal: spacing.lg, marginTop: spacing.sm,
+    paddingVertical: 6, paddingHorizontal: spacing.md, borderRadius: radii.sm,
+    borderLeftWidth: 3, borderLeftColor: colors.warning,
   },
-  cacheBannerText: { fontSize: 11, fontWeight: '600', color: '#e67e22' },
+  bannerText: { fontSize: 12, fontFamily: fonts.semiBold, color: colors.dangerDark },
 
+  // Charts Row
+  chartsRow: {
+    flexDirection: 'row', paddingHorizontal: spacing.lg,
+    gap: spacing.md, marginTop: spacing.lg, marginBottom: spacing.md,
+  },
+  chartCard: {
+    flex: 1, backgroundColor: colors.surface, borderRadius: radii.xl,
+    paddingVertical: spacing.lg, alignItems: 'center',
+    ...shadows.sm,
+  },
+  chartLabel: {
+    ...typography.sectionLabel, marginBottom: spacing.sm,
+  },
+  chartStatsRow: {
+    flexDirection: 'row', gap: spacing.md, marginTop: spacing.sm,
+  },
+  miniStat: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+  },
+  miniDot: {
+    width: 8, height: 8, borderRadius: 4,
+  },
+  miniStatText: {
+    fontSize: 12, fontFamily: fonts.semiBold, color: colors.textSecondary,
+  },
+
+  // Period toggle
+  periodToggle: {
+    flexDirection: 'row', gap: 2, marginBottom: spacing.sm,
+    backgroundColor: colors.surfaceHover, borderRadius: radii.full,
+    padding: 2,
+  },
+  periodBtn: {
+    fontSize: 11, fontFamily: fonts.semiBold, color: colors.textTertiary,
+    paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: radii.full,
+  },
+  periodBtnActive: {
+    color: colors.primary, backgroundColor: colors.surface,
+  },
+  periodDetail: {
+    fontSize: 12, fontFamily: fonts.medium, color: colors.textTertiary,
+    marginTop: spacing.xs,
+  },
+
+  // Alert card
   alertCard: {
-    backgroundColor: '#fff8e1', borderRadius: 12, padding: 14,
-    marginHorizontal: 16, marginBottom: 12, borderLeftWidth: 4, borderLeftColor: '#f39c12',
+    backgroundColor: colors.warningLight, borderRadius: radii.lg,
+    padding: spacing.md, marginHorizontal: spacing.lg, marginBottom: spacing.md,
+    borderLeftWidth: 4, borderLeftColor: colors.warning,
   },
-  alertTitle: { fontWeight: '700', fontSize: 15, color: '#e67e22', marginBottom: 6 },
-  alertText: { color: '#795548', fontSize: 13, marginBottom: 2 },
+  alertHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs,
+  },
+  alertTitle: { ...typography.label, color: colors.warningDark },
+  alertText: { ...typography.caption, color: colors.textSecondary, marginLeft: spacing.xxl },
 
+  // Filters
+  filterRow: {
+    flexDirection: 'row', paddingHorizontal: spacing.lg,
+    gap: spacing.sm, marginBottom: spacing.md,
+  },
+  filterChip: {
+    paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2,
+    borderRadius: radii.full, backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: colors.border,
+  },
+  filterChipActive: {
+    backgroundColor: colors.primary, borderColor: colors.primary,
+  },
+  filterText: {
+    fontSize: 12, fontFamily: fonts.semiBold, color: colors.textSecondary,
+  },
+  filterTextActive: {
+    color: colors.textInverse,
+  },
+
+  // Section header
   sectionHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 16, marginBottom: 10, marginTop: 6,
+    paddingHorizontal: spacing.lg, marginBottom: spacing.sm,
   },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#2c3e50' },
-  scanLink: { fontSize: 14, color: '#3498db', fontWeight: '600' },
+  sectionTitle: { ...typography.h3 },
+  scheduleCount: { ...typography.small, color: colors.textTertiary },
 
-  emptyContainer: { alignItems: 'center', paddingVertical: 40, paddingHorizontal: 16 },
-  emptyIcon: { fontSize: 48, marginBottom: 12 },
-  emptyText: { fontSize: 16, fontWeight: '700', color: '#2c3e50', marginBottom: 4 },
-  emptySubtext: { fontSize: 14, color: '#95a5a6', marginBottom: 20, textAlign: 'center' },
-  addMedBtn: {
-    backgroundColor: '#3498db', paddingVertical: 12, paddingHorizontal: 24,
-    borderRadius: 10,
+  // Empty state
+  emptyContainer: {
+    alignItems: 'center', paddingVertical: spacing.section, paddingHorizontal: spacing.lg,
   },
-  addMedText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  emptyText: { ...typography.bodySemiBold, color: colors.textSecondary, marginBottom: spacing.xs },
+  emptySubtext: { ...typography.caption, textAlign: 'center' },
 
-  listContainer: { paddingHorizontal: 16 },
+  // List
+  listContainer: { paddingHorizontal: spacing.lg },
 
-  // Compact stats row — below schedules
-  statsCompact: {
-    marginHorizontal: 16, marginTop: 16, marginBottom: 8,
-  },
-  statsRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-  },
-  statPill: {
-    flex: 1, alignItems: 'center', backgroundColor: '#fff',
-    paddingVertical: 10, borderRadius: 12, marginHorizontal: 3,
-    elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04, shadowRadius: 2,
-  },
-  statPillValue: { fontSize: 18, fontWeight: '800', color: '#2c3e50' },
-  statPillLabel: { fontSize: 10, color: '#95a5a6', fontWeight: '600', marginTop: 2 },
-
-  fab: {
-    position: 'absolute', bottom: 90, right: 20,
-    width: 56, height: 56, borderRadius: 28,
-    backgroundColor: '#3498db', alignItems: 'center', justifyContent: 'center',
-    elevation: 6,
-    shadowColor: '#3498db', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35, shadowRadius: 8,
-  },
-  fabText: { color: '#fff', fontSize: 28, fontWeight: '600', marginTop: -2 },
-
-  // B3: Bundle grouping
+  // Bundle grouping
   bundleSection: {
-    marginBottom: 12,
-    backgroundColor: '#f0f4ff',
-    borderRadius: 14,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#dbeafe',
+    marginBottom: spacing.md, backgroundColor: colors.primaryBg,
+    borderRadius: radii.lg, padding: spacing.sm + 2,
+    borderWidth: 1, borderColor: colors.border,
   },
   bundleHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 6,
-    paddingBottom: 8,
-    marginBottom: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: '#dbeafe',
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: spacing.sm, paddingBottom: spacing.sm,
+    marginBottom: spacing.xs, borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  bundleTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#3b82f6',
+  bundleTitleRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
   },
-  bundleCount: {
-    fontSize: 11,
-    color: '#93c5fd',
-    fontWeight: '600',
+  bundleTitle: { fontSize: 14, fontFamily: fonts.bold, color: colors.primary },
+  bundleCount: { fontSize: 12, fontFamily: fonts.semiBold, color: colors.textTertiary },
+
+  // FAB
+  fab: {
+    position: 'absolute', bottom: 90, right: spacing.xl,
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center',
+    ...shadows.colored(colors.primary),
   },
 });
 

@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, ActivityIndicator, Switch } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../api/client';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { colors, fonts, spacing, radii, shadows, typography } from '../theme';
+import { scheduleMedicationReminder, cancelAllReminders } from '../services/NotificationService';
+import { AuthContext } from '../context/AuthContext';
 
 const TYPE_UNITS = {
   TABLET: { options: ['Tablet(s)', 'Capsule(s)'], default: 'Tablet(s)', icon: 'pill' },
@@ -148,6 +151,21 @@ const EditScheduleScreen = ({ navigation, route }) => {
 
       await api.put(`/schedules/${schedule.id}`, payload);
       await AsyncStorage.setItem(`schedule_notif_${schedule.id}`, String(notificationsOn));
+
+      // Re-schedule notifications for the updated times
+      if (!isAsNeeded && notificationsOn) {
+        const userId = schedule.userId || schedule.user?.id;
+        for (const t of times) {
+          await scheduleMedicationReminder(
+            medicine.name || 'Medication',
+            t.getHours(),
+            t.getMinutes(),
+            schedule.id,
+            userId
+          );
+        }
+      }
+
       Alert.alert("Updated", "Schedule updated successfully!");
       navigation.goBack();
     } catch (e) {
@@ -189,7 +207,7 @@ const EditScheduleScreen = ({ navigation, route }) => {
         <View style={styles.medicineHeader}>
           <Text style={styles.medicineName}>{medicine.name || 'Medication'}</Text>
           <Text style={styles.medicineType}>
-            <MaterialCommunityIcons name={TYPE_UNITS[medType]?.icon || 'pill'} size={14} color="#7f8c8d" /> {medType.charAt(0) + medType.slice(1).toLowerCase()}
+            <MaterialCommunityIcons name={TYPE_UNITS[medType]?.icon || 'pill'} size={14} color={colors.textSecondary} /> {medType.charAt(0) + medType.slice(1).toLowerCase()}
           </Text>
         </View>
 
@@ -202,7 +220,7 @@ const EditScheduleScreen = ({ navigation, route }) => {
             onChangeText={setDoseAmount}
             placeholder="1"
             keyboardType="numeric"
-            placeholderTextColor="#bdc3c7"
+            placeholderTextColor={colors.textTertiary}
           />
           <View style={{ flex: 2 }}>
             <View style={styles.chipRow}>
@@ -258,7 +276,7 @@ const EditScheduleScreen = ({ navigation, route }) => {
         {/* As Needed info */}
         {isAsNeeded && (
           <View style={styles.infoCard}>
-            <Text style={styles.infoText}><MaterialCommunityIcons name="information" size={14} color="#3498db" /> No scheduled reminders — take when needed. Stock tracking still works.</Text>
+            <Text style={styles.infoText}><MaterialCommunityIcons name="information" size={14} color={colors.primary} /> No scheduled reminders — take when needed. Stock tracking still works.</Text>
           </View>
         )}
 
@@ -269,11 +287,11 @@ const EditScheduleScreen = ({ navigation, route }) => {
             {times.map((t, idx) => (
               <View key={idx} style={styles.timeRow}>
                 <TouchableOpacity style={styles.timeButton} onPress={() => showTimepicker(idx)}>
-                  <Text style={styles.timeButtonText}><MaterialCommunityIcons name="clock-outline" size={16} color="#2c3e50" /> {formatTime(t)}</Text>
+                  <Text style={styles.timeButtonText}><MaterialCommunityIcons name="clock-outline" size={16} color={colors.text} /> {formatTime(t)}</Text>
                 </TouchableOpacity>
                 {times.length > 1 && (
                   <TouchableOpacity style={styles.removeTimeBtn} onPress={() => removeTime(idx)}>
-                    <Text style={styles.removeTimeBtnText}><MaterialCommunityIcons name="close" size={16} color="#e74c3c" /></Text>
+                    <Text style={styles.removeTimeBtnText}><MaterialCommunityIcons name="close" size={16} color={colors.danger} /></Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -306,7 +324,7 @@ const EditScheduleScreen = ({ navigation, route }) => {
             onChangeText={setCurrentStock}
             placeholder="0"
             keyboardType="numeric"
-            placeholderTextColor="#bdc3c7"
+            placeholderTextColor={colors.textTertiary}
             textAlign="center"
           />
           <TouchableOpacity style={[styles.stockBtn, styles.stockBtnPlus]} onPress={() => adjustStock(1)}>
@@ -323,7 +341,7 @@ const EditScheduleScreen = ({ navigation, route }) => {
         {/* Notification Toggle */}
         <View style={styles.notifCard}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.notifTitle}><MaterialCommunityIcons name="bell-ring-outline" size={15} color="#2c3e50" /> Reminders</Text>
+            <Text style={styles.notifTitle}><MaterialCommunityIcons name="bell-ring-outline" size={15} color={colors.text} /> Reminders</Text>
             <Text style={styles.notifHint}>
               {notificationsOn 
                 ? 'You will get reminders for this medicine' 
@@ -333,23 +351,23 @@ const EditScheduleScreen = ({ navigation, route }) => {
           <Switch
             value={notificationsOn}
             onValueChange={handleToggleNotification}
-            trackColor={{ false: '#d1d5db', true: '#86efac' }}
-            thumbColor={notificationsOn ? '#22c55e' : '#9ca3af'}
+            trackColor={{ false: colors.border, true: colors.successLight }}
+            thumbColor={notificationsOn ? colors.success : colors.textTertiary}
           />
         </View>
 
         {/* Save Button */}
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving}>
           {saving ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={colors.textInverse} />
           ) : (
-            <Text style={styles.saveBtnText}><MaterialCommunityIcons name="content-save-outline" size={17} color="#fff" /> Update Schedule</Text>
+            <Text style={styles.saveBtnText}><MaterialCommunityIcons name="content-save-outline" size={17} color={colors.textInverse} /> Update Schedule</Text>
           )}
         </TouchableOpacity>
 
         {/* Delete Button */}
         <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
-          <Text style={styles.deleteBtnText}><MaterialCommunityIcons name="delete-outline" size={15} color="#e74c3c" /> Delete Schedule</Text>
+          <Text style={styles.deleteBtnText}><MaterialCommunityIcons name="delete-outline" size={15} color={colors.danger} /> Delete Schedule</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -357,106 +375,99 @@ const EditScheduleScreen = ({ navigation, route }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f6f9fc' },
-  scrollContent: { padding: 20, paddingBottom: 120 },
+  container: { flex: 1, backgroundColor: colors.background },
+  scrollContent: { padding: spacing.xl, paddingBottom: 120 },
 
   medicineHeader: {
-    backgroundColor: '#fff', borderRadius: 14, padding: 16,
-    marginBottom: 8, elevation: 2,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 4,
+    backgroundColor: colors.surface, borderRadius: radii.lg, padding: spacing.lg,
+    marginBottom: spacing.sm, ...shadows.sm,
   },
-  medicineName: { fontSize: 20, fontWeight: '800', color: '#2c3e50' },
-  medicineType: { fontSize: 13, color: '#7f8c8d', marginTop: 2 },
+  medicineName: { fontSize: 20, fontFamily: fonts.bold, color: colors.text },
+  medicineType: { fontSize: 13, fontFamily: fonts.regular, color: colors.textSecondary, marginTop: 2 },
 
-  label: { fontSize: 13, fontWeight: '700', color: '#34495e', marginBottom: 6, marginTop: 16, textTransform: 'uppercase', letterSpacing: 0.5 },
+  label: { ...typography.sectionLabel, marginBottom: spacing.xs, marginTop: spacing.lg },
   input: {
-    backgroundColor: '#fff', borderWidth: 1, borderColor: '#e0e6ed',
-    borderRadius: 12, padding: 14, fontSize: 16, color: '#2c3e50',
+    backgroundColor: colors.surfaceHover, borderWidth: 0,
+    borderRadius: radii.md, padding: spacing.md, fontSize: 16, fontFamily: fonts.regular, color: colors.text,
   },
   row: { flexDirection: 'row', alignItems: 'flex-start' },
 
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
-    paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20,
-    borderWidth: 1, borderColor: '#ddd', backgroundColor: '#fff',
+    paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.full,
+    backgroundColor: colors.surfaceHover,
   },
-  chipActive: { backgroundColor: '#3498db', borderColor: '#3498db' },
-  chipText: { fontSize: 13, fontWeight: '600', color: '#7f8c8d' },
-  chipTextActive: { color: '#fff' },
+  chipActive: { backgroundColor: colors.primary },
+  chipText: { fontSize: 13, fontFamily: fonts.semiBold, color: colors.textSecondary },
+  chipTextActive: { color: colors.textInverse },
 
-  daySelector: { marginTop: 8 },
-  dayLabel: { fontSize: 12, color: '#7f8c8d', marginBottom: 8 },
+  daySelector: { marginTop: spacing.sm },
+  dayLabel: { fontSize: 12, fontFamily: fonts.regular, color: colors.textSecondary, marginBottom: spacing.sm },
   dayRow: { flexDirection: 'row', justifyContent: 'space-between' },
   dayChip: {
     width: 40, height: 40, borderRadius: 20,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#ddd',
+    backgroundColor: colors.surfaceHover,
   },
-  dayChipActive: { backgroundColor: '#3498db', borderColor: '#3498db' },
-  dayChipText: { fontSize: 14, fontWeight: '700', color: '#7f8c8d' },
-  dayChipTextActive: { color: '#fff' },
+  dayChipActive: { backgroundColor: colors.primary },
+  dayChipText: { fontSize: 14, fontFamily: fonts.bold, color: colors.textSecondary },
+  dayChipTextActive: { color: colors.textInverse },
 
   infoCard: {
-    backgroundColor: '#e8f4fd', borderRadius: 12, padding: 14,
-    marginTop: 12, borderLeftWidth: 4, borderLeftColor: '#3498db',
+    backgroundColor: colors.primaryBg, borderRadius: radii.md, padding: spacing.md,
+    marginTop: spacing.md, borderLeftWidth: 4, borderLeftColor: colors.primary,
   },
-  infoText: { fontSize: 13, color: '#34495e', lineHeight: 18 },
+  infoText: { fontSize: 13, fontFamily: fonts.regular, color: colors.text, lineHeight: 18 },
 
-  timeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  timeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm },
   timeButton: {
-    flex: 1, backgroundColor: '#fff', padding: 14,
-    borderRadius: 12, borderWidth: 1, borderColor: '#e0e6ed',
+    flex: 1, backgroundColor: colors.surfaceHover, padding: spacing.md,
+    borderRadius: radii.md,
   },
-  timeButtonText: { fontSize: 16, color: '#2c3e50', fontWeight: '600' },
+  timeButtonText: { fontSize: 16, fontFamily: fonts.semiBold, color: colors.text },
   removeTimeBtn: {
-    marginLeft: 10, padding: 10, backgroundColor: '#fef2f2', borderRadius: 10,
+    marginLeft: spacing.sm, padding: spacing.sm, backgroundColor: colors.dangerLight, borderRadius: radii.sm,
   },
-  removeTimeBtnText: { color: '#e74c3c', fontWeight: '700', fontSize: 16 },
-  addTimeBtn: { marginTop: 4, marginBottom: 8 },
-  addTimeBtnText: { color: '#3498db', fontWeight: '600', fontSize: 14 },
+  removeTimeBtnText: { color: colors.danger, fontFamily: fonts.bold, fontSize: 16 },
+  addTimeBtn: { marginTop: spacing.xs, marginBottom: spacing.sm },
+  addTimeBtnText: { color: colors.primary, fontFamily: fonts.semiBold, fontSize: 14 },
 
-  stockRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  stockRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   stockInput: { flex: 1 },
   stockBtn: {
     width: 44, height: 44, borderRadius: 22,
-    backgroundColor: '#fef2f2', alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: '#e74c3c',
+    backgroundColor: colors.dangerLight, alignItems: 'center', justifyContent: 'center',
   },
-  stockBtnText: { fontSize: 22, fontWeight: '700', color: '#e74c3c' },
-  stockBtnPlus: { backgroundColor: '#eafaf1', borderColor: '#27ae60' },
-  stockBtnPlusText: { color: '#27ae60' },
+  stockBtnText: { fontSize: 22, fontFamily: fonts.bold, color: colors.danger },
+  stockBtnPlus: { backgroundColor: colors.successLight },
+  stockBtnPlusText: { color: colors.success },
   stockQuickBtn: {
-    paddingVertical: 8, paddingHorizontal: 12, borderRadius: 16,
-    backgroundColor: '#e8f4fd', borderWidth: 1, borderColor: '#3498db',
+    paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.full,
+    backgroundColor: colors.primaryBg,
   },
-  stockQuickBtnText: { fontSize: 12, fontWeight: '700', color: '#3498db' },
+  stockQuickBtnText: { fontSize: 12, fontFamily: fonts.bold, color: colors.primary },
 
   notifCard: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#fff', borderRadius: 14, padding: 16,
-    marginTop: 16, elevation: 2,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 4,
-    borderWidth: 1, borderColor: '#e0e6ed',
+    backgroundColor: colors.surface, borderRadius: radii.lg, padding: spacing.lg,
+    marginTop: spacing.lg, ...shadows.sm,
   },
-  notifTitle: { fontSize: 15, fontWeight: '600', color: '#2c3e50' },
-  notifHint: { fontSize: 11, color: '#95a5a6', marginTop: 2 },
+  notifTitle: { fontSize: 15, fontFamily: fonts.semiBold, color: colors.text },
+  notifHint: { fontSize: 11, fontFamily: fonts.regular, color: colors.textTertiary, marginTop: 2 },
 
   saveBtn: {
-    backgroundColor: '#27ae60', paddingVertical: 16, borderRadius: 12,
-    alignItems: 'center', marginTop: 24,
-    elevation: 3, shadowColor: '#27ae60',
-    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6,
+    backgroundColor: colors.success, paddingVertical: spacing.lg, borderRadius: radii.md,
+    alignItems: 'center', marginTop: spacing.xxl,
+    ...shadows.colored(colors.success),
   },
-  saveBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  saveBtnText: { color: colors.textInverse, fontSize: 17, fontFamily: fonts.bold },
 
   deleteBtn: {
-    paddingVertical: 14, borderRadius: 12,
-    alignItems: 'center', marginTop: 12,
-    borderWidth: 1.5, borderColor: '#e74c3c',
+    paddingVertical: spacing.md, borderRadius: radii.md,
+    alignItems: 'center', marginTop: spacing.md,
+    backgroundColor: colors.dangerLight,
   },
-  deleteBtnText: { color: '#e74c3c', fontSize: 15, fontWeight: '600' },
+  deleteBtnText: { color: colors.danger, fontSize: 15, fontFamily: fonts.semiBold },
 });
 
 export default EditScheduleScreen;

@@ -5,6 +5,7 @@ import * as Contacts from 'expo-contacts';
 import { useFocusEffect } from '@react-navigation/native';
 import api from '../api/client';
 import { AuthContext } from '../context/AuthContext';
+import { colors, fonts, spacing, radii, shadows, typography } from '../theme';
 
 const TABS = ['Members', 'Activity', 'Schedules'];
 
@@ -447,7 +448,7 @@ const GroupDetailsScreen = ({ route, navigation }) => {
             <Text style={styles.editBtnText}><MaterialCommunityIcons name="pencil-outline" size={14} color="#2563eb" /> Edit</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.editBtn, { backgroundColor: '#fef2f2', borderColor: '#fecaca' }]} onPress={handleDeleteGroup}>
-            <Text style={[styles.editBtnText, { color: '#dc2626' }]}><MaterialCommunityIcons name="delete-outline" size={14} color="#dc2626" /> Delete</Text>
+            <Text style={[styles.editBtnText, { color: colors.danger }]}><MaterialCommunityIcons name="delete-outline" size={14} color={colors.danger} /> Delete</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -502,7 +503,7 @@ const GroupDetailsScreen = ({ route, navigation }) => {
           <Text style={styles.memberPhone}>{item.phoneNumber || '—'}</Text>
         </View>
         {!isSelf && (
-          <Text style={{ fontSize: 16, color: '#bdc3c7' }}>›</Text>
+          <Text style={{ fontSize: 16, color: colors.textTertiary }}>›</Text>
         )}
       </TouchableOpacity>
     );
@@ -554,7 +555,7 @@ const GroupDetailsScreen = ({ route, navigation }) => {
   };
 
   const renderTabContent = () => {
-    if (loading) return <ActivityIndicator size="large" color="#3498db" style={{ marginTop: 40 }} />;
+    if (loading) return <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />;
 
     switch (activeTab) {
       case 'Members':
@@ -599,7 +600,7 @@ const GroupDetailsScreen = ({ route, navigation }) => {
                 <View style={{ alignItems: 'center', paddingVertical: 30 }}>
                   <MaterialCommunityIcons name="clipboard-text-outline" size={36} color="#94a3b8" style={{marginBottom: 10}} />
                   <Text style={styles.emptyText}>No shared schedules</Text>
-                  <Text style={{ fontSize: 13, color: '#95a5a6', marginTop: 4, textAlign: 'center' }}>
+                  <Text style={{ fontSize: 13, color: colors.textTertiary, marginTop: 4, textAlign: 'center' }}>
                     Tap "Share My Schedules" to let group members see your medications
                   </Text>
                 </View>
@@ -685,12 +686,12 @@ const GroupDetailsScreen = ({ route, navigation }) => {
         >
           <MaterialCommunityIcons name="chart-bar" size={22} color="#3b82f6" style={{marginRight: 12}} />
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 15, fontWeight: '700', color: '#1e293b' }}>Shared Schedules</Text>
-            <Text style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
+            <Text style={{ fontSize: 15, fontFamily: fonts.bold, color: colors.text }}>Shared Schedules</Text>
+            <Text style={{ fontSize: 12, fontFamily: fonts.regular, color: colors.textTertiary, marginTop: 2 }}>
               {sharedSchedules.length > 0 ? `${sharedSchedules.length} schedule${sharedSchedules.length !== 1 ? 's' : ''} shared` : 'Share & manage medication schedules'}
             </Text>
           </View>
-          <Text style={{ fontSize: 18, color: '#94a3b8' }}>›</Text>
+          <Text style={{ fontSize: 18, color: colors.textTertiary }}>›</Text>
         </TouchableOpacity>
 
         {/* ── Leave / Exit ── */}
@@ -716,11 +717,11 @@ const GroupDetailsScreen = ({ route, navigation }) => {
             <TextInput style={[styles.modalInput, { height: 80, textAlignVertical: 'top' }]} value={editDescription} onChangeText={setEditDescription} placeholder="Describe this group" placeholderTextColor="#bdc3c7" multiline />
 
             <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
-              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#e0e0e0', flex: 1 }]} onPress={() => setEditModalVisible(false)}>
-                <Text style={{ fontWeight: '600', color: '#7f8c8d' }}>Cancel</Text>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: colors.surfaceHover, flex: 1 }]} onPress={() => setEditModalVisible(false)}>
+                <Text style={{ fontFamily: fonts.semiBold, color: colors.textSecondary }}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#3498db', flex: 1 }]} onPress={handleSaveEdit} disabled={editSaving}>
-                {editSaving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ fontWeight: '700', color: '#fff' }}>Save</Text>}
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: colors.primary, flex: 1 }]} onPress={handleSaveEdit} disabled={editSaving}>
+                {editSaving ? <ActivityIndicator color={colors.textInverse} size="small" /> : <Text style={{ fontFamily: fonts.bold, color: colors.textInverse }}>Save</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -739,14 +740,14 @@ const GroupDetailsScreen = ({ route, navigation }) => {
               value={addMemberSearch}
               onChangeText={handleMemberSearch}
               placeholder="Search by name or phone number"
-              placeholderTextColor="#bdc3c7"
+              placeholderTextColor={colors.textTertiary}
               autoFocus
             />
 
             {contactLoading ? (
               <View style={{ alignItems: 'center', paddingVertical: 30 }}>
-                <ActivityIndicator size="large" color="#3498db" />
-                <Text style={{ color: '#95a5a6', marginTop: 8, fontSize: 13 }}>Loading contacts...</Text>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={{ color: colors.textTertiary, marginTop: 8, fontSize: 13, fontFamily: fonts.regular }}>Loading contacts...</Text>
               </View>
             ) : (
               <ScrollView style={{ maxHeight: 380 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
@@ -766,27 +767,27 @@ const GroupDetailsScreen = ({ route, navigation }) => {
                           )}
                           <Text style={styles.memberPhone}>{user.displayPhone || user.phoneNumber}</Text>
                         </View>
-                        <Text style={{ color: '#27ae60', fontSize: 22, fontWeight: '700' }}>+</Text>
+                        <Text style={{ color: colors.success, fontSize: 22, fontFamily: fonts.bold }}>+</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
                 )}
 
                 {/* DB search results (non-contact users) */}
-                {dbSearching && <ActivityIndicator size="small" color="#3498db" style={{ marginVertical: 10 }} />}
+                {dbSearching && <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 10 }} />}
                 {dbSearchResults.length > 0 && (
                   <View style={{ marginTop: 8 }}>
-                    <Text style={[styles.contactMatchesTitle, { color: '#7f8c8d' }]}>Not in your contacts</Text>
+                    <Text style={[styles.contactMatchesTitle, { color: colors.textSecondary }]}>Not in your contacts</Text>
                     {dbSearchResults.map(user => (
                       <TouchableOpacity key={user.id} style={styles.matchItem} onPress={() => handleAddMember(user)}>
-                        <View style={[styles.memberAvatar, { backgroundColor: '#95a5a6' }]}>
+                        <View style={[styles.memberAvatar, { backgroundColor: colors.textTertiary }]}>
                           <Text style={styles.memberAvatarText}>{(user.fullName || user.username || '?')[0].toUpperCase()}</Text>
                         </View>
                         <View style={{ flex: 1 }}>
                           <Text style={styles.memberName}>{user.fullName || user.username}</Text>
                           <Text style={styles.memberPhone}>{user.phoneNumber}</Text>
                         </View>
-                        <Text style={{ color: '#27ae60', fontSize: 22, fontWeight: '700' }}>+</Text>
+                        <Text style={{ color: colors.success, fontSize: 22, fontFamily: fonts.bold }}>+</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -795,11 +796,11 @@ const GroupDetailsScreen = ({ route, navigation }) => {
                 {/* Empty states */}
                 {filteredUsers.length === 0 && dbSearchResults.length === 0 && !dbSearching && !contactLoading && (
                   <View style={{ alignItems: 'center', paddingVertical: 24 }}>
-                    <MaterialCommunityIcons name="account-outline" size={32} color="#95a5a6" style={{marginBottom: 8}} />
+                    <MaterialCommunityIcons name="account-outline" size={32} color={colors.textTertiary} style={{marginBottom: 8}} />
                     {addMemberSearch.trim() ? (
                       <>
                         <Text style={styles.emptyText}>No users found</Text>
-                        <Text style={{ fontSize: 12, color: '#95a5a6', marginTop: 4, textAlign: 'center' }}>
+                        <Text style={{ fontSize: 12, color: colors.textTertiary, marginTop: 4, textAlign: 'center' }}>
                           {addMemberSearch.replace(/\D/g, '').length < 10
                             ? 'Enter a full 10-digit phone number to search our database'
                             : 'This number is not registered on MedScan'}
@@ -808,7 +809,7 @@ const GroupDetailsScreen = ({ route, navigation }) => {
                     ) : (
                       <>
                         <Text style={styles.emptyText}>No contacts on MedScan</Text>
-                        <Text style={{ fontSize: 12, color: '#95a5a6', marginTop: 4, textAlign: 'center' }}>
+                        <Text style={{ fontSize: 12, color: colors.textTertiary, marginTop: 4, textAlign: 'center' }}>
                           Type a phone number to search
                         </Text>
                       </>
@@ -818,8 +819,8 @@ const GroupDetailsScreen = ({ route, navigation }) => {
               </ScrollView>
             )}
 
-            <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#e0e0e0', marginTop: 16 }]} onPress={() => setAddMemberVisible(false)}>
-              <Text style={{ fontWeight: '600', color: '#7f8c8d' }}>Close</Text>
+            <TouchableOpacity style={[styles.modalBtn, { backgroundColor: colors.surfaceHover, marginTop: 16 }]} onPress={() => setAddMemberVisible(false)}>
+              <Text style={{ fontFamily: fonts.semiBold, color: colors.textSecondary }}>Close</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -830,7 +831,7 @@ const GroupDetailsScreen = ({ route, navigation }) => {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { maxHeight: '80%' }]}>
             <Text style={styles.modalTitle}>Select Schedules to Share</Text>
-            <Text style={{ fontSize: 12, color: '#95a5a6', marginBottom: 12 }}>Choose which medicines to share with this group</Text>
+            <Text style={{ fontSize: 12, fontFamily: fonts.regular, color: colors.textTertiary, marginBottom: 12 }}>Choose which medicines to share with this group</Text>
 
             <ScrollView style={{ maxHeight: 320 }} nestedScrollEnabled>
               {userSchedules.map(sched => {
@@ -844,7 +845,7 @@ const GroupDetailsScreen = ({ route, navigation }) => {
                     disabled={isShared}
                   >
                     <View style={[styles.shareCheckbox, isSelected && styles.shareCheckboxActive]}>
-                      {(isSelected || isShared) && <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>✓</Text>}
+                      {(isSelected || isShared) && <Text style={{ color: colors.textInverse, fontSize: 12, fontFamily: fonts.bold }}>✓</Text>}
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.shareItemName}>{sched.medicine?.name || 'Unknown Medicine'}</Text>
@@ -859,18 +860,18 @@ const GroupDetailsScreen = ({ route, navigation }) => {
             </ScrollView>
 
             <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
-              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#e0e0e0', flex: 1 }]} onPress={() => setShareModalVisible(false)}>
-                <Text style={{ fontWeight: '600', color: '#7f8c8d' }}>Cancel</Text>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: colors.surfaceHover, flex: 1 }]} onPress={() => setShareModalVisible(false)}>
+                <Text style={{ fontFamily: fonts.semiBold, color: colors.textSecondary }}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: '#27ae60', flex: 1 }]}
+                style={[styles.modalBtn, { backgroundColor: colors.success, flex: 1 }]}
                 onPress={confirmShareSelected}
                 disabled={shareLoading || selectedShareIds.size === 0}
               >
                 {shareLoading ? (
-                  <ActivityIndicator color="#fff" size="small" />
+                  <ActivityIndicator color={colors.textInverse} size="small" />
                 ) : (
-                  <Text style={{ fontWeight: '700', color: '#fff' }}>Share ({selectedShareIds.size})</Text>
+                  <Text style={{ fontFamily: fonts.bold, color: colors.textInverse }}>Share ({selectedShareIds.size})</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -882,193 +883,185 @@ const GroupDetailsScreen = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f6f9fc' },
+  container: { flex: 1, backgroundColor: colors.background },
 
   headerCard: {
-    backgroundColor: '#fff', margin: 16, borderRadius: 16, padding: 16,
-    elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08, shadowRadius: 8,
+    backgroundColor: colors.surface, margin: spacing.lg, borderRadius: radii.xl, padding: spacing.lg,
+    ...shadows.md,
   },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
   headerIcon: {
-    width: 50, height: 50, borderRadius: 25, backgroundColor: '#e8f4fd',
-    alignItems: 'center', justifyContent: 'center', marginRight: 14,
+    width: 50, height: 50, borderRadius: 25, backgroundColor: colors.primaryBg,
+    alignItems: 'center', justifyContent: 'center', marginRight: spacing.md,
   },
-  headerName: { fontSize: 20, fontWeight: '700', color: '#2c3e50' },
-  headerDesc: { fontSize: 13, color: '#7f8c8d', marginTop: 3, lineHeight: 18 },
-  headerMeta: { fontSize: 12, color: '#95a5a6', marginTop: 4 },
+  headerName: { fontSize: 20, fontFamily: fonts.bold, color: colors.text },
+  headerDesc: { fontSize: 13, fontFamily: fonts.regular, color: colors.textSecondary, marginTop: 3, lineHeight: 18 },
+  headerMeta: { fontSize: 12, fontFamily: fonts.regular, color: colors.textTertiary, marginTop: 4 },
   editBtn: {
-    marginTop: 12, alignSelf: 'flex-start', paddingVertical: 8, paddingHorizontal: 14,
-    backgroundColor: '#f0f7ff', borderRadius: 8, borderWidth: 1, borderColor: '#bee3f8',
+    marginTop: spacing.md, alignSelf: 'flex-start', paddingVertical: spacing.sm, paddingHorizontal: spacing.md,
+    backgroundColor: colors.primaryBg, borderRadius: radii.sm,
   },
-  editBtnText: { fontSize: 13, fontWeight: '600', color: '#2980b9' },
+  editBtnText: { fontSize: 13, fontFamily: fonts.semiBold, color: colors.primary },
 
   tabRow: {
-    flexDirection: 'row', marginHorizontal: 16, marginBottom: 12,
-    backgroundColor: '#ecf0f1', borderRadius: 12, padding: 4,
+    flexDirection: 'row', marginHorizontal: spacing.lg, marginBottom: spacing.md,
+    backgroundColor: colors.surfaceHover, borderRadius: radii.md, padding: 4,
   },
-  tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
-  tabActive: { backgroundColor: '#fff', elevation: 2 },
-  tabText: { fontSize: 13, fontWeight: '600', color: '#95a5a6' },
-  tabTextActive: { color: '#2c3e50' },
+  tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: radii.sm },
+  tabActive: { backgroundColor: colors.surface, ...shadows.sm },
+  tabText: { fontSize: 13, fontFamily: fonts.semiBold, color: colors.textTertiary },
+  tabTextActive: { color: colors.text },
 
   memberCard: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff',
-    marginHorizontal: 16, marginBottom: 8, padding: 14, borderRadius: 12,
-    elevation: 1,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface,
+    marginHorizontal: spacing.lg, marginBottom: spacing.sm, padding: spacing.md, borderRadius: radii.lg,
+    ...shadows.sm,
   },
   memberAvatar: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: '#3498db',
-    alignItems: 'center', justifyContent: 'center', marginRight: 12,
+    width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primary,
+    alignItems: 'center', justifyContent: 'center', marginRight: spacing.md,
   },
-  memberAvatarText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  memberName: { fontSize: 14, fontWeight: '600', color: '#2c3e50' },
-  adminBadge: { fontWeight: '400', color: '#27ae60', fontSize: 12 },
-  youBadge: { fontWeight: '400', color: '#3498db', fontSize: 12 },
-  memberPhone: { fontSize: 12, color: '#95a5a6', marginTop: 2 },
-  memberAlias: { fontSize: 11, color: '#bdc3c7', fontStyle: 'italic', marginTop: 1 },
+  memberAvatarText: { color: colors.textInverse, fontFamily: fonts.bold, fontSize: 16 },
+  memberName: { fontSize: 14, fontFamily: fonts.semiBold, color: colors.text },
+  adminBadge: { fontFamily: fonts.regular, color: colors.success, fontSize: 12 },
+  youBadge: { fontFamily: fonts.regular, color: colors.primary, fontSize: 12 },
+  memberPhone: { fontSize: 12, fontFamily: fonts.regular, color: colors.textTertiary, marginTop: 2 },
+  memberAlias: { fontSize: 11, fontFamily: fonts.regular, color: colors.textTertiary, fontStyle: 'italic', marginTop: 1 },
   memberActionBtn: {
-    paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8,
-    borderWidth: 1, borderColor: '#3498db',
+    paddingVertical: 6, paddingHorizontal: 10, borderRadius: radii.sm,
+    borderWidth: 1, borderColor: colors.primary,
   },
 
   addMemberBtn: {
-    marginHorizontal: 16, marginBottom: 12, paddingVertical: 12,
-    backgroundColor: '#e8f4fd', borderRadius: 10, alignItems: 'center',
-    borderWidth: 1, borderColor: '#bee3f8',
+    marginHorizontal: spacing.lg, marginBottom: spacing.md, paddingVertical: spacing.md,
+    backgroundColor: colors.primaryBg, borderRadius: radii.md, alignItems: 'center',
   },
-  addMemberBtnText: { fontSize: 14, fontWeight: '600', color: '#2980b9' },
+  addMemberBtnText: { fontSize: 14, fontFamily: fonts.semiBold, color: colors.primary },
 
   activityCard: {
-    backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 8,
-    padding: 14, borderRadius: 12, elevation: 1,
+    backgroundColor: colors.surface, marginHorizontal: spacing.lg, marginBottom: spacing.sm,
+    padding: spacing.md, borderRadius: radii.lg, ...shadows.sm,
   },
-  activityType: { fontSize: 11, fontWeight: '700', color: '#3498db', textTransform: 'uppercase', marginBottom: 4 },
-  activityMessage: { fontSize: 14, color: '#2c3e50' },
-  activityTime: { fontSize: 11, color: '#bdc3c7', marginTop: 6 },
+  activityType: { fontSize: 11, fontFamily: fonts.bold, color: colors.primary, textTransform: 'uppercase', marginBottom: 4 },
+  activityMessage: { fontSize: 14, fontFamily: fonts.regular, color: colors.text },
+  activityTime: { fontSize: 11, fontFamily: fonts.regular, color: colors.textTertiary, marginTop: 6 },
 
   scheduleCard: {
-    backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 10,
-    padding: 14, borderRadius: 12, elevation: 1,
+    backgroundColor: colors.surface, marginHorizontal: spacing.lg, marginBottom: spacing.sm + 2,
+    padding: spacing.md, borderRadius: radii.lg, ...shadows.sm,
   },
   scheduleHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  scheduleName: { fontSize: 15, fontWeight: '700', color: '#2c3e50' },
-  scheduleDose: { fontSize: 13, color: '#7f8c8d' },
-  scheduleSharedBy: { fontSize: 12, color: '#3498db', marginTop: 4 },
-  scheduleTimes: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  scheduleName: { fontSize: 15, fontFamily: fonts.bold, color: colors.text },
+  scheduleDose: { fontSize: 13, fontFamily: fonts.regular, color: colors.textSecondary },
+  scheduleSharedBy: { fontSize: 12, fontFamily: fonts.medium, color: colors.primary, marginTop: 4 },
+  scheduleTimes: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: spacing.sm },
   scheduleTimeChip: {
-    fontSize: 12, color: '#34495e', backgroundColor: '#f0f7ff',
-    paddingVertical: 4, paddingHorizontal: 10, borderRadius: 8,
+    fontSize: 12, fontFamily: fonts.medium, color: colors.text, backgroundColor: colors.primaryBg,
+    paddingVertical: 4, paddingHorizontal: 10, borderRadius: radii.sm,
   },
   reminderBtn: {
-    marginTop: 10, paddingVertical: 8, alignItems: 'center',
-    backgroundColor: '#fff8e1', borderRadius: 8,
-    borderWidth: 1, borderColor: '#ffd54f',
+    marginTop: spacing.sm + 2, paddingVertical: spacing.sm, alignItems: 'center',
+    backgroundColor: colors.warningLight, borderRadius: radii.sm,
   },
-  reminderBtnText: { fontSize: 12, fontWeight: '600', color: '#f57f17' },
+  reminderBtnText: { fontSize: 12, fontFamily: fonts.semiBold, color: colors.warningDark },
 
   settingRow: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#f8f9fa', borderRadius: 10, padding: 12,
+    backgroundColor: colors.surfaceHover, borderRadius: radii.md, padding: spacing.md,
   },
 
-  emptyText: { fontSize: 15, color: '#95a5a6', textAlign: 'center', marginTop: 20 },
+  emptyText: { fontSize: 15, fontFamily: fonts.regular, color: colors.textTertiary, textAlign: 'center', marginTop: 20 },
 
   // Modals
   modalOverlay: {
     flex: 1, justifyContent: 'center', alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: colors.overlay,
   },
   modalContent: {
-    backgroundColor: '#fff', borderRadius: 20, padding: 24,
-    width: '88%', maxWidth: 400, elevation: 10,
+    backgroundColor: colors.surface, borderRadius: radii.xxl, padding: spacing.xxl,
+    width: '88%', maxWidth: 400, ...shadows.xl,
   },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: '#2c3e50', marginBottom: 16 },
-  modalLabel: { fontSize: 12, fontWeight: '700', color: '#7f8c8d', marginBottom: 6, textTransform: 'uppercase' },
+  modalTitle: { fontSize: 18, fontFamily: fonts.bold, color: colors.text, marginBottom: spacing.lg },
+  modalLabel: { ...typography.sectionLabel, marginBottom: 6 },
   modalInput: {
-    backgroundColor: '#f8f9fa', borderWidth: 1, borderColor: '#e0e6ed',
-    borderRadius: 10, padding: 12, fontSize: 15, color: '#2c3e50',
-    marginBottom: 8,
+    backgroundColor: colors.surfaceHover, borderWidth: 1, borderColor: colors.border,
+    borderRadius: radii.md, padding: spacing.md, fontSize: 15, fontFamily: fonts.regular, color: colors.text,
+    marginBottom: spacing.sm,
   },
   modalBtn: {
-    paddingVertical: 12, borderRadius: 10, alignItems: 'center',
+    paddingVertical: spacing.md, borderRadius: radii.md, alignItems: 'center',
   },
 
   contactsBtn: {
-    backgroundColor: '#e8f4fd', paddingVertical: 12, borderRadius: 10,
-    alignItems: 'center', borderWidth: 1, borderColor: '#bee3f8', marginBottom: 10,
+    backgroundColor: colors.primaryBg, paddingVertical: spacing.md, borderRadius: radii.md,
+    alignItems: 'center', marginBottom: spacing.sm + 2,
   },
-  contactsBtnText: { fontSize: 14, fontWeight: '600', color: '#2980b9' },
+  contactsBtnText: { fontSize: 14, fontFamily: fonts.semiBold, color: colors.primary },
   contactMatchesSection: {
-    backgroundColor: '#f0fdf4', borderRadius: 10, padding: 10,
-    marginBottom: 8, borderWidth: 1, borderColor: '#bbf7d0',
+    backgroundColor: colors.successLight, borderRadius: radii.md, padding: spacing.sm + 2,
+    marginBottom: spacing.sm,
   },
-  contactMatchesTitle: { fontSize: 13, fontWeight: '600', color: '#27ae60', marginBottom: 6 },
+  contactMatchesTitle: { fontSize: 13, fontFamily: fonts.semiBold, color: colors.success, marginBottom: 6 },
   matchItem: {
-    flexDirection: 'row', alignItems: 'center', paddingVertical: 8,
-    borderBottomWidth: 1, borderBottomColor: '#f0f0f0',
+    flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm,
+    borderBottomWidth: 1, borderBottomColor: colors.borderLight,
   },
 
   // Share picker
   sharePickerItem: {
-    flexDirection: 'row', alignItems: 'center', paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: '#f0f0f0',
+    flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.md,
+    borderBottomWidth: 1, borderBottomColor: colors.borderLight,
   },
   shareCheckbox: {
     width: 24, height: 24, borderRadius: 6, borderWidth: 2,
-    borderColor: '#d1d5db', alignItems: 'center', justifyContent: 'center',
-    marginRight: 12,
+    borderColor: colors.border, alignItems: 'center', justifyContent: 'center',
+    marginRight: spacing.md,
   },
   shareCheckboxActive: {
-    backgroundColor: '#27ae60', borderColor: '#27ae60',
+    backgroundColor: colors.success, borderColor: colors.success,
   },
-  shareItemName: { fontSize: 15, fontWeight: '600', color: '#2c3e50' },
-  shareItemDetail: { fontSize: 12, color: '#95a5a6', marginTop: 2 },
+  shareItemName: { fontSize: 15, fontFamily: fonts.semiBold, color: colors.text },
+  shareItemDetail: { fontSize: 12, fontFamily: fonts.regular, color: colors.textTertiary, marginTop: 2 },
 
   // Section cards
   sectionCard: {
-    backgroundColor: '#fff', marginHorizontal: 16, marginTop: 12,
-    borderRadius: 14, padding: 16,
-    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 4,
+    backgroundColor: colors.surface, marginHorizontal: spacing.lg, marginTop: spacing.md,
+    borderRadius: radii.lg, padding: spacing.lg, ...shadows.sm,
   },
-  sectionLabel: {
-    fontSize: 12, fontWeight: '700', color: '#95a5a6', letterSpacing: 0.8,
-    marginBottom: 12,
-  },
+  sectionLabel: { ...typography.sectionLabel, marginBottom: spacing.md },
 
   // Global remind button
   globalRemindBtn: {
-    backgroundColor: '#e8faf0', borderRadius: 12, padding: 14,
-    borderWidth: 1.5, borderColor: '#a7f3d0', marginBottom: 12, alignItems: 'center',
+    backgroundColor: colors.successLight, borderRadius: radii.md, padding: spacing.md,
+    marginBottom: spacing.md, alignItems: 'center',
   },
-  globalRemindBtnText: { fontSize: 14, fontWeight: '700', color: '#059669' },
-  globalRemindDesc: { fontSize: 11, color: '#6ee7b7', marginTop: 4, textAlign: 'center' },
+  globalRemindBtnText: { fontSize: 14, fontFamily: fonts.bold, color: colors.successDark },
+  globalRemindDesc: { fontSize: 11, fontFamily: fonts.regular, color: colors.success, marginTop: 4, textAlign: 'center' },
 
   // Trigger toggle
   triggerToggleRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingVertical: 10, paddingHorizontal: 4,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    paddingVertical: spacing.sm + 2, paddingHorizontal: spacing.xs,
   },
-  triggerTitle: { fontSize: 14, fontWeight: '600', color: '#2c3e50', marginBottom: 2 },
-  triggerDesc: { fontSize: 12, color: '#95a5a6', lineHeight: 17 },
+  triggerTitle: { fontSize: 14, fontFamily: fonts.semiBold, color: colors.text, marginBottom: 2 },
+  triggerDesc: { fontSize: 12, fontFamily: fonts.regular, color: colors.textTertiary, lineHeight: 17 },
   toggleTrack: {
-    width: 46, height: 26, borderRadius: 13, backgroundColor: '#d1d5db',
+    width: 46, height: 26, borderRadius: 13, backgroundColor: colors.border,
     justifyContent: 'center', paddingHorizontal: 3,
   },
-  toggleTrackActive: { backgroundColor: '#34d399' },
+  toggleTrackActive: { backgroundColor: colors.success },
   toggleThumb: {
-    width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff',
+    width: 20, height: 20, borderRadius: 10, backgroundColor: colors.textInverse,
     elevation: 2,
   },
   toggleThumbActive: { alignSelf: 'flex-end' },
 
   // Leave button
   leaveBtn: {
-    backgroundColor: '#fef2f2', paddingVertical: 14, borderRadius: 10,
-    alignItems: 'center', borderWidth: 1, borderColor: '#fecaca',
+    backgroundColor: colors.dangerLight, paddingVertical: spacing.md, borderRadius: radii.md,
+    alignItems: 'center', borderWidth: 1, borderColor: '#FECACA',
   },
-  leaveBtnText: { fontSize: 15, fontWeight: '700', color: '#dc2626' },
+  leaveBtnText: { fontSize: 15, fontFamily: fonts.bold, color: colors.danger },
 });
 
 export default GroupDetailsScreen;

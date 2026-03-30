@@ -1,17 +1,20 @@
 import React, { useState, useContext } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, ActivityIndicator, ScrollView, SafeAreaView } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import api from '../api/client';
 import { AuthContext } from '../context/AuthContext';
+import { useToast } from '../components/Toast';
+import { colors, fonts, spacing, radii, shadows, typography } from '../theme';
 
 const SCAN_MODES = [
   { key: 'prescription', label: 'Prescription', icon: 'file-document-outline', desc: 'Handwritten or printed prescription' },
-  { key: 'strip', label: 'Medicine Strip', icon: 'pill', desc: 'Tablet blister pack / strip' },
+  { key: 'strip', label: 'Medicine Strip', icon: 'pill', desc: 'Tablet blister pack or strip' },
 ];
 
 const ScanPrescriptionScreen = ({ navigation }) => {
   const { userInfo } = useContext(AuthContext);
+  const toast = useToast();
   const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -50,35 +53,34 @@ const ScanPrescriptionScreen = ({ navigation }) => {
       }
     } catch (e) {
       console.error('[Scan] Picker error:', e.message);
-      Alert.alert('Error', 'Failed to pick image.');
+      toast.error('Failed to pick image.');
     }
   };
 
   const handleScan = async () => {
     if (!image) {
-      Alert.alert('Error', 'Please select or capture an image first.');
+      toast.error('Please select or capture an image first.');
       return;
     }
 
     setLoading(true);
     try {
       const formData = new FormData();
-      formData.append('image', {
-        uri: image,
-        type: 'image/jpeg',
-        name: 'prescription.jpg',
-      });
+      formData.append('image', { uri: image, type: 'image/jpeg', name: 'prescription.jpg' });
 
       const endpoint = scanMode === 'strip' ? '/prescriptions/scan-strip' : '/prescriptions/scan';
       const res = await api.post(endpoint, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 120000, // 2 min timeout for OCR processing
+        timeout: 120000,
       });
 
       setResult(res.data);
+      if (res.data?.medicines?.length) {
+        toast.success(`Found ${res.data.medicines.length} medicine(s).`);
+      }
     } catch (e) {
       console.error('[Scan] OCR failed:', e.response?.data || e.message);
-      Alert.alert('Scan Failed', 'Could not process the image. Please try again with a clearer image.');
+      toast.error('Could not process image. Try a clearer photo.');
     } finally {
       setLoading(false);
     }
@@ -89,180 +91,201 @@ const ScanPrescriptionScreen = ({ navigation }) => {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Scan Prescription</Text>
-      <Text style={styles.subtitle}>Take a photo or upload an image of your prescription or medicine strip to extract details.</Text>
+    <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Mode Toggle */}
+        <View style={styles.modeRow}>
+          {SCAN_MODES.map(mode => (
+            <TouchableOpacity
+              key={mode.key}
+              style={[styles.modeBtn, scanMode === mode.key && styles.modeBtnActive]}
+              onPress={() => { setScanMode(mode.key); setResult(null); }}
+              activeOpacity={0.7}
+            >
+              <MaterialCommunityIcons name={mode.icon} size={20} color={scanMode === mode.key ? colors.textInverse : colors.textSecondary} />
+              <Text style={[styles.modeText, scanMode === mode.key && styles.modeTextActive]}>{mode.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <Text style={styles.modeDesc}>{SCAN_MODES.find(m => m.key === scanMode)?.desc}</Text>
 
-      {/* Scan Mode Toggle */}
-      <View style={styles.modeRow}>
-        {SCAN_MODES.map(mode => (
-          <TouchableOpacity
-            key={mode.key}
-            style={[styles.modeBtn, scanMode === mode.key && styles.modeBtnActive]}
-            onPress={() => { setScanMode(mode.key); setResult(null); }}
-          >
-            <MaterialCommunityIcons
-              name={mode.icon}
-              size={20}
-              color={scanMode === mode.key ? '#fff' : '#7f8c8d'}
-            />
-            <Text style={[styles.modeText, scanMode === mode.key && styles.modeTextActive]}>
-              {mode.label}
-            </Text>
+        {/* Image Preview */}
+        <View style={styles.imageContainer}>
+          {image ? (
+            <Image source={{ uri: image }} style={styles.image} resizeMode="contain" />
+          ) : (
+            <View style={styles.placeholder}>
+              <View style={styles.placeholderCircle}>
+                <MaterialCommunityIcons name="camera-outline" size={36} color={colors.textTertiary} />
+              </View>
+              <Text style={styles.placeholderText}>No image selected</Text>
+              <Text style={styles.placeholderSub}>Take a photo or choose from gallery</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Capture Buttons */}
+        <View style={styles.buttonRow}>
+          <TouchableOpacity style={styles.cameraBtn} onPress={() => pickImage(true)} activeOpacity={0.8}>
+            <MaterialCommunityIcons name="camera" size={18} color={colors.textInverse} />
+            <Text style={styles.btnText}>Camera</Text>
           </TouchableOpacity>
-        ))}
-      </View>
-      <Text style={styles.modeDesc}>
-        {SCAN_MODES.find(m => m.key === scanMode)?.desc}
-      </Text>
+          <TouchableOpacity style={styles.galleryBtn} onPress={() => pickImage(false)} activeOpacity={0.8}>
+            <MaterialCommunityIcons name="image-outline" size={18} color={colors.textInverse} />
+            <Text style={styles.btnText}>Gallery</Text>
+          </TouchableOpacity>
+        </View>
 
-      {/* Image Preview */}
-      <View style={styles.imageContainer}>
-        {image ? (
-          <Image source={{ uri: image }} style={styles.image} resizeMode="contain" />
-        ) : (
-          <View style={styles.placeholder}>
-            <MaterialCommunityIcons name="camera-outline" size={48} color="#bdc3c7" style={{marginBottom: 8}} />
-            <Text style={styles.placeholderText}>No image selected</Text>
+        {/* Scan Button */}
+        {image && (
+          <TouchableOpacity style={styles.scanBtn} onPress={handleScan} disabled={loading} activeOpacity={0.8}>
+            {loading ? (
+              <View style={{ alignItems: 'center' }}>
+                <ActivityIndicator color={colors.textInverse} />
+                <Text style={styles.scanLoadingText}>Processing... this may take a moment</Text>
+              </View>
+            ) : (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                <MaterialCommunityIcons name="text-recognition" size={20} color={colors.textInverse} />
+                <Text style={styles.scanBtnText}>Scan Now</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        )}
+
+        {/* Results */}
+        {result && (
+          <View style={styles.resultsSection}>
+            <Text style={styles.resultsTitle}>Extracted Medicines</Text>
+            {(result.medicines || []).length === 0 ? (
+              <View style={styles.noResultsCard}>
+                <MaterialCommunityIcons name="file-search-outline" size={36} color={colors.textTertiary} />
+                <Text style={styles.noResults}>No medicines detected. Try a clearer image or switch scan mode.</Text>
+              </View>
+            ) : (
+              result.medicines.map((med, idx) => (
+                <View key={idx} style={styles.resultCard}>
+                  <View style={styles.resultInfo}>
+                    <Text style={styles.resultName}>{med.name || 'Unknown'}</Text>
+                    {med.manufacturer && <Text style={styles.resultDetail}>Manufacturer: {med.manufacturer}</Text>}
+                    {med.composition && <Text style={styles.resultDetail}>Composition: {med.composition}</Text>}
+                    {med.dosage && <Text style={styles.resultDetail}>Dosage: {med.dosage}</Text>}
+                    {med.matchScore != null && (
+                      <View style={styles.matchBadge}>
+                        <MaterialCommunityIcons name="check-circle" size={12} color={colors.success} />
+                        <Text style={styles.resultScore}>{Math.round(med.matchScore)}% match</Text>
+                      </View>
+                    )}
+                  </View>
+                  <TouchableOpacity style={styles.addBtn} onPress={() => handleAddMedicine(med)}>
+                    <MaterialCommunityIcons name="plus" size={16} color={colors.textInverse} />
+                    <Text style={styles.addBtnText}>Add</Text>
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
           </View>
         )}
-      </View>
 
-      {/* Buttons */}
-      <View style={styles.buttonRow}>
-        <TouchableOpacity style={[styles.pickBtn, styles.cameraBtn]} onPress={() => pickImage(true)}>
-          <Text style={styles.pickBtnText}><MaterialCommunityIcons name="camera" size={15} color="#fff" /> Camera</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.pickBtn, styles.galleryBtn]} onPress={() => pickImage(false)}>
-          <Text style={styles.pickBtnText}><MaterialCommunityIcons name="image-outline" size={15} color="#fff" /> Gallery</Text>
-        </TouchableOpacity>
-      </View>
-
-      {image && (
-        <TouchableOpacity style={styles.scanBtn} onPress={handleScan} disabled={loading}>
-          {loading ? (
-            <View style={{ alignItems: 'center' }}>
-              <ActivityIndicator color="#fff" />
-              <Text style={{ color: '#fff', fontSize: 12, marginTop: 6 }}>Processing... this may take a moment</Text>
+        {result?.rawText && (
+          <View style={styles.rawTextSection}>
+            <View style={styles.rawTextHeader}>
+              <MaterialCommunityIcons name="text-box-outline" size={16} color={colors.textSecondary} />
+              <Text style={styles.rawTextTitle}>Raw OCR Text</Text>
             </View>
-          ) : (
-            <Text style={styles.scanBtnText}><MaterialCommunityIcons name="magnify" size={17} color="#fff" /> Scan Now</Text>
-          )}
-        </TouchableOpacity>
-      )}
+            <Text style={styles.rawText}>{result.rawText}</Text>
+          </View>
+        )}
 
-      {/* Results */}
-      {result && (
-        <View style={styles.resultsSection}>
-          <Text style={styles.resultsTitle}>Extracted Medicines</Text>
-          {(result.medicines || []).length === 0 ? (
-            <Text style={styles.noResults}>No medicines detected. Try a clearer image or switch scan mode.</Text>
-          ) : (
-            result.medicines.map((med, idx) => (
-              <View key={idx} style={styles.resultCard}>
-                <View style={styles.resultInfo}>
-                  <Text style={styles.resultName}>{med.name || 'Unknown'}</Text>
-                  {med.manufacturer && <Text style={styles.resultDetail}>Manufacturer: {med.manufacturer}</Text>}
-                  {med.composition && <Text style={styles.resultDetail}>Composition: {med.composition}</Text>}
-                  {med.dosage && <Text style={styles.resultDetail}>Dosage: {med.dosage}</Text>}
-                  {med.matchScore != null && (
-                    <Text style={styles.resultScore}>Match: {Math.round(med.matchScore)}%</Text>
-                  )}
-                </View>
-                <TouchableOpacity style={styles.addBtn} onPress={() => handleAddMedicine(med)}>
-                  <Text style={styles.addBtnText}>+ Add</Text>
-                </TouchableOpacity>
-              </View>
-            ))
-          )}
-        </View>
-      )}
-
-      {result?.rawText && (
-        <View style={styles.rawTextSection}>
-          <Text style={styles.rawTextTitle}>Raw OCR Text</Text>
-          <Text style={styles.rawText}>{result.rawText}</Text>
-        </View>
-      )}
-
-      <View style={{ height: 40 }} />
-    </ScrollView>
+        <View style={{ height: 80 }} />
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f6f9fc' },
-  content: { padding: 20 },
-  title: { fontSize: 22, fontWeight: '800', color: '#2c3e50', marginBottom: 6 },
-  subtitle: { fontSize: 14, color: '#7f8c8d', marginBottom: 16, lineHeight: 20 },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { padding: spacing.xl },
 
-  // Scan mode toggle
-  modeRow: { flexDirection: 'row', gap: 10, marginBottom: 6 },
+  // Mode toggle
+  modeRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
   modeBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, paddingVertical: 12, borderRadius: 12,
-    backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e0e6ed',
+    gap: spacing.sm, paddingVertical: spacing.md, borderRadius: radii.md,
+    backgroundColor: colors.surface, ...shadows.sm,
   },
-  modeBtnActive: {
-    backgroundColor: '#3498db', borderColor: '#3498db',
-  },
-  modeText: { fontSize: 14, fontWeight: '600', color: '#7f8c8d' },
-  modeTextActive: { color: '#fff' },
-  modeDesc: { fontSize: 12, color: '#95a5a6', marginBottom: 16, textAlign: 'center' },
+  modeBtnActive: { backgroundColor: colors.primary, ...shadows.colored(colors.primary) },
+  modeText: { fontSize: 14, fontFamily: fonts.semiBold, color: colors.textSecondary },
+  modeTextActive: { color: colors.textInverse },
+  modeDesc: { fontSize: 12, fontFamily: fonts.regular, color: colors.textTertiary, marginBottom: spacing.lg, textAlign: 'center' },
 
+  // Image
   imageContainer: {
-    height: 250, backgroundColor: '#fff', borderRadius: 16,
-    marginBottom: 16, overflow: 'hidden',
-    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 4,
+    height: 240, backgroundColor: colors.surface, borderRadius: radii.xl,
+    marginBottom: spacing.lg, overflow: 'hidden', ...shadows.md,
   },
   image: { width: '100%', height: '100%' },
   placeholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  placeholderIcon: { fontSize: 48, marginBottom: 8 },
-  placeholderText: { color: '#bdc3c7', fontSize: 15 },
-
-  buttonRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
-  pickBtn: {
-    flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center',
-    elevation: 2,
+  placeholderCircle: {
+    width: 72, height: 72, borderRadius: 36, backgroundColor: colors.surfaceHover,
+    alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md,
   },
-  cameraBtn: { backgroundColor: '#3498db' },
-  galleryBtn: { backgroundColor: '#9b59b6' },
-  pickBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  placeholderText: { fontSize: 15, fontFamily: fonts.semiBold, color: colors.textSecondary },
+  placeholderSub: { fontSize: 12, fontFamily: fonts.regular, color: colors.textTertiary, marginTop: spacing.xs },
+
+  // Buttons
+  buttonRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md },
+  cameraBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: spacing.sm, paddingVertical: spacing.md, borderRadius: radii.md,
+    backgroundColor: colors.primary, ...shadows.colored(colors.primary),
+  },
+  galleryBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: spacing.sm, paddingVertical: spacing.md, borderRadius: radii.md,
+    backgroundColor: '#7C3AED', ...shadows.colored('#7C3AED'),
+  },
+  btnText: { color: colors.textInverse, fontSize: 15, fontFamily: fonts.bold },
 
   scanBtn: {
-    backgroundColor: '#27ae60', paddingVertical: 16, borderRadius: 12,
-    alignItems: 'center', marginBottom: 20,
-    elevation: 3, shadowColor: '#27ae60',
-    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6,
+    backgroundColor: colors.success, paddingVertical: spacing.lg, borderRadius: radii.md,
+    alignItems: 'center', marginBottom: spacing.xl, ...shadows.colored(colors.success),
   },
-  scanBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  scanBtnText: { color: colors.textInverse, fontSize: 17, fontFamily: fonts.bold },
+  scanLoadingText: { color: colors.textInverse, fontSize: 12, fontFamily: fonts.regular, marginTop: spacing.sm, opacity: 0.8 },
 
-  resultsSection: { marginTop: 8 },
-  resultsTitle: { fontSize: 18, fontWeight: '700', color: '#34495e', marginBottom: 12 },
-  noResults: { color: '#95a5a6', fontSize: 14, textAlign: 'center', paddingVertical: 20 },
+  // Results
+  resultsSection: { marginTop: spacing.sm },
+  resultsTitle: { ...typography.sectionLabel, marginBottom: spacing.md },
+  noResultsCard: {
+    alignItems: 'center', padding: spacing.xxl, backgroundColor: colors.surface,
+    borderRadius: radii.lg, ...shadows.sm,
+  },
+  noResults: { ...typography.caption, textAlign: 'center', marginTop: spacing.sm },
 
   resultCard: {
-    flexDirection: 'row', backgroundColor: '#fff', borderRadius: 12,
-    padding: 14, marginBottom: 10, alignItems: 'center',
-    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04, shadowRadius: 3,
+    flexDirection: 'row', backgroundColor: colors.surface, borderRadius: radii.lg,
+    padding: spacing.lg, marginBottom: spacing.sm + 2, alignItems: 'center', ...shadows.sm,
   },
   resultInfo: { flex: 1 },
-  resultName: { fontSize: 16, fontWeight: '700', color: '#2c3e50' },
-  resultDetail: { fontSize: 13, color: '#7f8c8d', marginTop: 2 },
-  resultScore: { fontSize: 12, color: '#27ae60', fontWeight: '600', marginTop: 4 },
+  resultName: { fontSize: 15, fontFamily: fonts.bold, color: colors.text },
+  resultDetail: { fontSize: 13, fontFamily: fonts.regular, color: colors.textSecondary, marginTop: 2 },
+  matchBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing.xs },
+  resultScore: { fontSize: 12, fontFamily: fonts.semiBold, color: colors.success },
   addBtn: {
-    backgroundColor: '#3498db', paddingVertical: 8, paddingHorizontal: 16,
-    borderRadius: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: colors.primary, paddingVertical: spacing.sm, paddingHorizontal: spacing.md,
+    borderRadius: radii.sm,
   },
-  addBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  addBtnText: { color: colors.textInverse, fontFamily: fonts.bold, fontSize: 13 },
 
+  // Raw text
   rawTextSection: {
-    backgroundColor: '#fff', borderRadius: 12, padding: 14, marginTop: 16,
+    backgroundColor: colors.surface, borderRadius: radii.lg, padding: spacing.lg, marginTop: spacing.lg, ...shadows.sm,
   },
-  rawTextTitle: { fontSize: 14, fontWeight: '700', color: '#34495e', marginBottom: 8 },
-  rawText: { fontSize: 13, color: '#7f8c8d', lineHeight: 18 },
+  rawTextHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  rawTextTitle: { fontSize: 14, fontFamily: fonts.bold, color: colors.textSecondary },
+  rawText: { fontSize: 13, fontFamily: fonts.regular, color: colors.textTertiary, lineHeight: 18 },
 });
 
 export default ScanPrescriptionScreen;

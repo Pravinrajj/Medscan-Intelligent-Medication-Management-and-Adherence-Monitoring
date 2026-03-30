@@ -7,7 +7,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import api from '../api/client';
 import { AuthContext } from '../context/AuthContext';
-
+import { colors, fonts, spacing, radii, shadows, typography } from '../theme';
 const MemberActivityScreen = ({ route, navigation }) => {
   const { userInfo } = useContext(AuthContext);
   const { member, group } = route.params || {};
@@ -118,12 +118,12 @@ const MemberActivityScreen = ({ route, navigation }) => {
 
   const getEventStyle = (type) => {
     switch (type) {
-      case 'TAKEN': return { iconName: 'check', color: '#27ae60', bg: '#e8f8f0' };
-      case 'MISSED': return { iconName: 'close', color: '#e74c3c', bg: '#fef2f2' };
-      case 'SNOOZED': return { iconName: 'clock-outline', color: '#f39c12', bg: '#fef9e7' };
-      case 'REMINDER_SENT': return { iconName: 'bell-ring-outline', color: '#3498db', bg: '#eef6fc' };
-      case 'UNDO': return { iconName: 'undo', color: '#95a5a6', bg: '#f4f6f7' };
-      default: return { iconName: 'circle-small', color: '#7f8c8d', bg: '#f8f9fa' };
+      case 'TAKEN': return { iconName: 'check', color: colors.success, bg: colors.successLight };
+      case 'MISSED': return { iconName: 'close', color: colors.danger, bg: colors.dangerLight };
+      case 'SNOOZED': return { iconName: 'clock-outline', color: colors.warning, bg: colors.warningLight };
+      case 'REMINDER_SENT': return { iconName: 'bell-ring-outline', color: colors.primary, bg: colors.primaryBg };
+      case 'UNDO': return { iconName: 'undo', color: colors.textTertiary, bg: colors.surfaceHover };
+      default: return { iconName: 'circle-small', color: colors.textSecondary, bg: colors.surfaceHover };
     }
   };
 
@@ -155,7 +155,7 @@ const MemberActivityScreen = ({ route, navigation }) => {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#3498db" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -183,7 +183,7 @@ const MemberActivityScreen = ({ route, navigation }) => {
               targetUserName: memberName,
             })}
           >
-            <MaterialCommunityIcons name="clipboard-text-outline" size={20} color="#3498db" />
+            <MaterialCommunityIcons name="clipboard-text-outline" size={20} color={colors.primary} />
             <Text style={styles.actionBtnLabel}>Add Medicine</Text>
           </TouchableOpacity>
         )}
@@ -219,62 +219,53 @@ const MemberActivityScreen = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f6f9fc' },
+  container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  // Member header
   memberHeader: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    paddingHorizontal: 20, paddingVertical: 18,
-    backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eef0f2',
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    paddingHorizontal: spacing.xl, paddingVertical: spacing.lg + 2,
+    backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.borderLight,
   },
   memberAvatar: {
-    width: 50, height: 50, borderRadius: 25, backgroundColor: '#3498db',
+    width: 50, height: 50, borderRadius: 25, backgroundColor: colors.primary,
     alignItems: 'center', justifyContent: 'center',
   },
-  memberAvatarText: { color: '#fff', fontSize: 20, fontWeight: '700' },
-  memberNameText: { fontSize: 18, fontWeight: '700', color: '#2c3e50' },
-  memberPhoneText: { fontSize: 13, color: '#95a5a6', marginTop: 2 },
+  memberAvatarText: { color: colors.textInverse, fontSize: 20, fontFamily: fonts.bold },
+  memberNameText: { fontSize: 18, fontFamily: fonts.bold, color: colors.text },
+  memberPhoneText: { fontSize: 13, fontFamily: fonts.regular, color: colors.textTertiary, marginTop: 2 },
 
-  // Actions
   actionsRow: {
-    flexDirection: 'row', gap: 10,
-    paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eef0f2',
+    flexDirection: 'row', gap: spacing.sm + 2,
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+    backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.borderLight,
   },
   actionBtn: {
-    flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 10,
-    borderWidth: 1.5, borderColor: '#3498db', backgroundColor: '#fafbfc',
+    flex: 1, alignItems: 'center', paddingVertical: spacing.sm + 2, borderRadius: radii.md,
+    backgroundColor: colors.primaryBg,
   },
   actionBtnIcon: { fontSize: 18, marginBottom: 3 },
-  actionBtnLabel: { fontSize: 11, fontWeight: '600', color: '#3498db' },
+  actionBtnLabel: { fontSize: 11, fontFamily: fonts.semiBold, color: colors.primary },
 
-  // Section
-  sectionTitle: {
-    fontSize: 13, fontWeight: '700', color: '#7f8c8d', textTransform: 'uppercase',
-    letterSpacing: 0.5, marginTop: 16, marginBottom: 8, marginLeft: 20,
-  },
+  sectionTitle: { ...typography.sectionLabel, marginTop: spacing.lg, marginBottom: spacing.sm, marginLeft: spacing.xl },
 
-  // Date separator
-  dateSep: { alignItems: 'center', marginVertical: 8 },
+  dateSep: { alignItems: 'center', marginVertical: spacing.sm },
   dateSepText: {
-    backgroundColor: '#e8ecf0', paddingHorizontal: 12, paddingVertical: 4,
-    borderRadius: 10, fontSize: 11, fontWeight: '600', color: '#5f6368', overflow: 'hidden',
+    backgroundColor: colors.surfaceHover, paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
+    borderRadius: radii.sm, fontSize: 11, fontFamily: fonts.semiBold, color: colors.textSecondary, overflow: 'hidden',
   },
 
-  // Activity card
   activityCard: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
-    padding: 12, borderRadius: 10, marginBottom: 6,
+    flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm + 2,
+    padding: spacing.md, borderRadius: radii.md, marginBottom: spacing.xs + 2,
     borderLeftWidth: 3,
   },
-  activityIcon: { fontSize: 16, fontWeight: '700', marginTop: 1 },
-  activityMsg: { fontSize: 13, color: '#2c3e50', lineHeight: 18 },
-  activityTime: { fontSize: 10, color: '#95a5a6', marginTop: 3 },
+  activityIcon: { fontSize: 16, fontFamily: fonts.bold, marginTop: 1 },
+  activityMsg: { fontSize: 13, fontFamily: fonts.regular, color: colors.text, lineHeight: 18 },
+  activityTime: { fontSize: 10, fontFamily: fonts.medium, color: colors.textTertiary, marginTop: 3 },
 
-  // Empty
   emptyBox: { alignItems: 'center', paddingTop: 50 },
-  emptyText: { fontSize: 14, color: '#95a5a6' },
+  emptyText: { fontSize: 14, fontFamily: fonts.regular, color: colors.textTertiary },
 });
 
 export default MemberActivityScreen;

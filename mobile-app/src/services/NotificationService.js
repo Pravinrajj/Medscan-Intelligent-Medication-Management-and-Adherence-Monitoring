@@ -26,12 +26,12 @@ export async function setupNotificationActions() {
     await Notifications.setNotificationCategoryAsync(MEDICATION_CATEGORY, [
       {
         identifier: 'TAKE',
-        buttonTitle: '💊 Take',
+        buttonTitle: 'Take',
         options: { opensAppToForeground: false },
       },
       {
         identifier: 'SNOOZE',
-        buttonTitle: '⏰ Snooze (15m)',
+        buttonTitle: 'Snooze (15m)',
         options: { opensAppToForeground: false },
       },
     ]);
@@ -75,13 +75,14 @@ export function addNotificationActionListener() {
         // Reschedule for +15 minutes
         const snoozeId = await Notifications.scheduleNotificationAsync({
           content: {
-            title: '💊 Snoozed Reminder',
+            title: 'Snoozed Reminder',
             body: `Time to take your ${data.medicineName || 'medication'}`,
             sound: 'default',
             categoryIdentifier: MEDICATION_CATEGORY,
-            data: { ...data, notificationId: undefined }, // New notification will get its own ID
+            data: { ...data, notificationId: undefined },
           },
           trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
             seconds: 900, // 15 minutes
           },
         });
@@ -133,7 +134,7 @@ export async function registerForPushNotificationsAsync(userId) {
         name: 'Medication Reminders',
         importance: Notifications.AndroidImportance.HIGH,
         vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#3498db',
+        lightColor: '#0891B2',
         sound: 'default',
       });
     }
@@ -149,7 +150,7 @@ export async function registerForPushNotificationsAsync(userId) {
         name: 'Medication Reminders',
         importance: Notifications.AndroidImportance.HIGH,
         vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#3498db',
+        lightColor: '#0891B2',
         sound: 'default',
       });
     }
@@ -190,10 +191,11 @@ export async function scheduleMedicationReminder(name, hours, minutes, scheduleI
 
     const id = await Notifications.scheduleNotificationAsync({
       content: {
-        title: '💊 Medication Reminder',
+        title: 'Medication Reminder',
         body: `Time to take your ${name}`,
         sound: 'default',
         categoryIdentifier: MEDICATION_CATEGORY,
+        ...(Platform.OS === 'android' ? { channelId: 'medication-reminders' } : {}),
         data: {
           medicineName: name,
           scheduleId,
@@ -201,10 +203,10 @@ export async function scheduleMedicationReminder(name, hours, minutes, scheduleI
         },
       },
       trigger: {
-        type: 'daily',
+        type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
         hour: hours,
         minute: minutes,
-        repeats: true,
+        repeating: true,
       },
     });
 

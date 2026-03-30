@@ -8,7 +8,7 @@ import * as Contacts from 'expo-contacts';
 import { useFocusEffect } from '@react-navigation/native';
 import api from '../api/client';
 import { AuthContext } from '../context/AuthContext';
-
+import { colors, fonts, spacing, radii, shadows, typography } from '../theme';
 const SharedSchedulesScreen = ({ route, navigation }) => {
   const { userInfo } = useContext(AuthContext);
   const { group } = route.params || {};
@@ -177,7 +177,7 @@ const SharedSchedulesScreen = ({ route, navigation }) => {
       <View style={styles.scheduleCard}>
         <View style={styles.cardTop}>
           <View style={styles.cardIconCircle}>
-            <MaterialCommunityIcons name="pill" size={20} color="#3b82f6" />
+            <MaterialCommunityIcons name="pill" size={20} color={colors.primary} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.medName}>{medName}</Text>
@@ -197,7 +197,7 @@ const SharedSchedulesScreen = ({ route, navigation }) => {
             {times.map((t, idx) => (
               <View key={idx} style={styles.timeChip}>
                 <Text style={styles.timeChipText}>
-                  <MaterialCommunityIcons name="clock-outline" size={12} color="#64748b" /> {t.scheduledTime ? t.scheduledTime.substring(0, 5) : '—'}
+                  <MaterialCommunityIcons name="clock-outline" size={12} color={colors.textSecondary} /> {t.scheduledTime ? t.scheduledTime.substring(0, 5) : '—'}
                 </Text>
               </View>
             ))}
@@ -238,11 +238,11 @@ const SharedSchedulesScreen = ({ route, navigation }) => {
           isSelected && styles.pickerCheckboxSelected,
         ]}>
           {(isSelected || isAlready) && (
-            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>✓</Text>
+            <Text style={{ color: colors.textInverse, fontSize: 12, fontFamily: fonts.bold }}>✓</Text>
           )}
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.pickerMedName, isAlready && { color: '#94a3b8' }]}>
+          <Text style={[styles.pickerMedName, isAlready && { color: colors.textTertiary }]}>
             {medName}
           </Text>
           <Text style={styles.pickerDose}>
@@ -259,7 +259,7 @@ const SharedSchedulesScreen = ({ route, navigation }) => {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#3498db" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -285,7 +285,7 @@ const SharedSchedulesScreen = ({ route, navigation }) => {
         }
         ListEmptyComponent={
           <View style={styles.emptyBox}>
-            <MaterialCommunityIcons name="chart-bar" size={48} color="#94a3b8" style={{marginBottom: 12}} />
+            <MaterialCommunityIcons name="chart-bar" size={48} color={colors.textTertiary} style={{marginBottom: 12}} />
             <Text style={styles.emptyTitle}>No shared schedules</Text>
             <Text style={styles.emptyDesc}>
               Share your medication schedules with the group so members can help track and remind
@@ -297,7 +297,7 @@ const SharedSchedulesScreen = ({ route, navigation }) => {
       {/* Share button — fixed bottom bar */}
       <View style={styles.bottomBar}>
         <TouchableOpacity style={styles.shareBtn} onPress={openSharePicker} activeOpacity={0.8}>
-          <Text style={styles.shareBtnText}><MaterialCommunityIcons name="chart-bar" size={15} color="#fff" /> Share My Schedules</Text>
+          <Text style={styles.shareBtnText}><MaterialCommunityIcons name="chart-bar" size={15} color={colors.textInverse} /> Share My Schedules</Text>
         </TouchableOpacity>
       </View>
 
@@ -312,14 +312,14 @@ const SharedSchedulesScreen = ({ route, navigation }) => {
 
             {pickerLoading ? (
               <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-                <ActivityIndicator size="large" color="#2563eb" />
-                <Text style={{ color: '#94a3b8', marginTop: 12 }}>Loading your schedules...</Text>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={{ color: colors.textTertiary, marginTop: 12, fontFamily: fonts.regular }}>Loading your schedules...</Text>
               </View>
             ) : mySchedules.length === 0 ? (
               <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-                <MaterialCommunityIcons name="clipboard-text-outline" size={36} color="#94a3b8" style={{ marginBottom: 8 }} />
-                <Text style={{ fontSize: 15, fontWeight: '600', color: '#64748b' }}>No schedules found</Text>
-                <Text style={{ fontSize: 13, color: '#94a3b8', marginTop: 4, textAlign: 'center' }}>
+                <MaterialCommunityIcons name="clipboard-text-outline" size={36} color={colors.textTertiary} style={{ marginBottom: 8 }} />
+                <Text style={{ fontSize: 15, fontFamily: fonts.semiBold, color: colors.textSecondary }}>No schedules found</Text>
+                <Text style={{ fontSize: 13, fontFamily: fonts.regular, color: colors.textTertiary, marginTop: 4, textAlign: 'center' }}>
                   Add medicines to your dashboard first, then share them here
                 </Text>
               </View>
@@ -367,102 +367,87 @@ const SharedSchedulesScreen = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f6f9fc' },
+  container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  listContent: { padding: 16, paddingBottom: 16 },
+  listContent: { padding: spacing.lg, paddingBottom: spacing.lg },
 
-  listHeader: { marginBottom: 16 },
-  listHeaderTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b' },
-  listHeaderDesc: { fontSize: 13, color: '#94a3b8', marginTop: 4, lineHeight: 19 },
+  listHeader: { marginBottom: spacing.lg },
+  listHeaderTitle: { fontSize: 18, fontFamily: fonts.bold, color: colors.text },
+  listHeaderDesc: { fontSize: 13, fontFamily: fonts.regular, color: colors.textTertiary, marginTop: 4, lineHeight: 19 },
 
-  // Schedule card
   scheduleCard: {
-    backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 10,
-    elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 3,
+    backgroundColor: colors.surface, borderRadius: radii.lg, padding: spacing.lg, marginBottom: spacing.sm + 2,
+    ...shadows.sm,
   },
-  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  cardTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   cardIconCircle: {
-    width: 44, height: 44, borderRadius: 12, backgroundColor: '#ecfdf5',
+    width: 44, height: 44, borderRadius: radii.md, backgroundColor: colors.successLight,
     alignItems: 'center', justifyContent: 'center',
   },
-  medName: { fontSize: 16, fontWeight: '700', color: '#1e293b' },
-  dosage: { fontSize: 13, color: '#64748b', marginTop: 2 },
+  medName: { fontSize: 16, fontFamily: fonts.bold, color: colors.text },
+  dosage: { fontSize: 13, fontFamily: fonts.regular, color: colors.textSecondary, marginTop: 2 },
 
   unshareBtn: {
-    width: 32, height: 32, borderRadius: 16, backgroundColor: '#fef2f2',
+    width: 32, height: 32, borderRadius: 16, backgroundColor: colors.dangerLight,
     alignItems: 'center', justifyContent: 'center',
   },
-  unshareBtnText: { color: '#dc2626', fontSize: 14, fontWeight: '700' },
+  unshareBtnText: { color: colors.danger, fontSize: 14, fontFamily: fonts.bold },
 
-  timesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
+  timesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: spacing.sm + 2 },
   timeChip: {
-    backgroundColor: '#f0f9ff', paddingHorizontal: 10, paddingVertical: 5,
-    borderRadius: 8, borderWidth: 1, borderColor: '#bae6fd',
+    backgroundColor: colors.primaryBg, paddingHorizontal: spacing.sm + 2, paddingVertical: spacing.xs + 1,
+    borderRadius: radii.sm,
   },
-  timeChipText: { fontSize: 12, color: '#0369a1', fontWeight: '600' },
+  timeChipText: { fontSize: 12, fontFamily: fonts.semiBold, color: colors.primary },
 
-  sharedByRow: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
-  sharedByText: { fontSize: 12, color: '#94a3b8' },
+  sharedByRow: { marginTop: spacing.sm + 2, paddingTop: spacing.sm + 2, borderTopWidth: 1, borderTopColor: colors.borderLight },
+  sharedByText: { fontSize: 12, fontFamily: fonts.regular, color: colors.textTertiary },
 
-  // Bottom bar
-  bottomBar: {
-    padding: 16, paddingBottom: 14, marginBottom: 60,
-  },
+  bottomBar: { padding: spacing.lg, paddingBottom: spacing.md, marginBottom: 60 },
   shareBtn: {
-    backgroundColor: '#2563eb', paddingVertical: 14, borderRadius: 14,
-    alignItems: 'center', elevation: 4,
-    shadowColor: '#2563eb', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 8,
+    backgroundColor: colors.primary, paddingVertical: spacing.md, borderRadius: radii.lg,
+    alignItems: 'center', ...shadows.colored(colors.primary),
   },
-  shareBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  shareBtnText: { color: colors.textInverse, fontSize: 16, fontFamily: fonts.bold },
 
-  // Empty
-  emptyBox: { alignItems: 'center', paddingTop: 50, paddingHorizontal: 30 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b', marginBottom: 8 },
-  emptyDesc: { fontSize: 13, color: '#94a3b8', textAlign: 'center', lineHeight: 20 },
+  emptyBox: { alignItems: 'center', paddingTop: 50, paddingHorizontal: spacing.xxl },
+  emptyTitle: { fontSize: 18, fontFamily: fonts.bold, color: colors.text, marginBottom: spacing.sm },
+  emptyDesc: { fontSize: 13, fontFamily: fonts.regular, color: colors.textTertiary, textAlign: 'center', lineHeight: 20 },
 
-  // ─── Picker Modal ───
-  modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
+  modalOverlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
   modalContent: {
-    backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    padding: 24, paddingBottom: 30,
-    maxHeight: '80%',
+    backgroundColor: colors.surface, borderTopLeftRadius: radii.xxl, borderTopRightRadius: radii.xxl,
+    padding: spacing.xxl, paddingBottom: spacing.xxl + 6, maxHeight: '80%',
   },
-  modalTitle: { fontSize: 20, fontWeight: '800', color: '#1e293b', marginBottom: 4 },
-  modalSubtitle: { fontSize: 13, color: '#94a3b8', marginBottom: 16 },
+  modalTitle: { fontSize: 20, fontFamily: fonts.bold, color: colors.text, marginBottom: 4 },
+  modalSubtitle: { fontSize: 13, fontFamily: fonts.regular, color: colors.textTertiary, marginBottom: spacing.lg },
 
-  // Picker item
   pickerItem: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingVertical: 12, paddingHorizontal: 4,
-    borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    paddingVertical: spacing.md, paddingHorizontal: spacing.xs,
+    borderBottomWidth: 1, borderBottomColor: colors.borderLight,
   },
   pickerItemDisabled: { opacity: 0.5 },
-  pickerItemSelected: { backgroundColor: '#eff6ff' },
+  pickerItemSelected: { backgroundColor: colors.primaryBg },
 
   pickerCheckbox: {
     width: 24, height: 24, borderRadius: 6,
-    borderWidth: 2, borderColor: '#cbd5e1',
+    borderWidth: 2, borderColor: colors.border,
     alignItems: 'center', justifyContent: 'center',
   },
-  pickerCheckboxDisabled: { backgroundColor: '#e2e8f0', borderColor: '#e2e8f0' },
-  pickerCheckboxSelected: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
+  pickerCheckboxDisabled: { backgroundColor: colors.surfaceHover, borderColor: colors.surfaceHover },
+  pickerCheckboxSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
 
-  pickerMedName: { fontSize: 15, fontWeight: '600', color: '#1e293b' },
-  pickerDose: { fontSize: 12, color: '#64748b', marginTop: 2 },
-  pickerAlreadyText: { fontSize: 11, color: '#059669', fontWeight: '600', marginTop: 2 },
+  pickerMedName: { fontSize: 15, fontFamily: fonts.semiBold, color: colors.text },
+  pickerDose: { fontSize: 12, fontFamily: fonts.regular, color: colors.textSecondary, marginTop: 2 },
+  pickerAlreadyText: { fontSize: 11, fontFamily: fonts.semiBold, color: colors.success, marginTop: 2 },
 
-  // Modal actions
-  modalActions: { flexDirection: 'row', gap: 12, marginTop: 16 },
-  modalBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  modalCancelBtn: { backgroundColor: '#f1f5f9' },
-  modalCancelText: { fontSize: 15, fontWeight: '600', color: '#64748b' },
-  modalShareBtn: { backgroundColor: '#2563eb' },
-  modalShareText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  modalActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
+  modalBtn: { flex: 1, paddingVertical: spacing.md, borderRadius: radii.md, alignItems: 'center' },
+  modalCancelBtn: { backgroundColor: colors.surfaceHover },
+  modalCancelText: { fontSize: 15, fontFamily: fonts.semiBold, color: colors.textSecondary },
+  modalShareBtn: { backgroundColor: colors.primary },
+  modalShareText: { fontSize: 15, fontFamily: fonts.bold, color: colors.textInverse },
 });
 
 export default SharedSchedulesScreen;

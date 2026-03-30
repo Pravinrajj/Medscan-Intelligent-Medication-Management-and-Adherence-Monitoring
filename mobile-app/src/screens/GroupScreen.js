@@ -1,9 +1,10 @@
 import React, { useContext, useState, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, RefreshControl, ActivityIndicator, SafeAreaView } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import api from '../api/client';
 import { AuthContext } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
+import { colors, fonts, spacing, radii, shadows, typography, components } from '../theme';
 
 const GroupScreen = ({ navigation }) => {
   const { userInfo } = useContext(AuthContext);
@@ -52,162 +53,161 @@ const GroupScreen = ({ navigation }) => {
     return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
   };
 
-  const renderItem = ({ item }) => (
-    <TouchableOpacity 
-      style={styles.groupCard} 
-      onPress={() => navigation.navigate('GroupChat', { group: item })}
-      activeOpacity={0.7}
-    >
-      <View style={styles.groupIcon}>
-        <MaterialCommunityIcons name="account-group" size={22} color="#3498db" />
-      </View>
-      <View style={styles.groupInfo}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={styles.groupName} numberOfLines={1}>{item.groupName || item.name}</Text>
-          {item.lastActivityTime && (
-            <Text style={styles.lastTime}>{getRelativeTime(item.lastActivityTime)}</Text>
-          )}
+  // Color for group avatar based on group id
+  const getGroupColor = (id) => {
+    const palette = [colors.primary, '#7C3AED', '#059669', '#D97706', '#DC2626', '#2563EB'];
+    return palette[(id || 0) % palette.length];
+  };
+
+  const renderItem = ({ item }) => {
+    const groupColor = getGroupColor(item.id);
+    const initial = (item.groupName || item.name || 'G')[0].toUpperCase();
+
+    return (
+      <TouchableOpacity
+        style={styles.groupCard}
+        onPress={() => navigation.navigate('GroupChat', { group: item })}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.groupAvatar, { backgroundColor: groupColor + '15' }]}>
+          <Text style={[styles.groupAvatarText, { color: groupColor }]}>{initial}</Text>
         </View>
-        {item.lastActivityMessage ? (
-          <Text style={styles.lastMessage} numberOfLines={1}>{item.lastActivityMessage}</Text>
-        ) : item.description ? (
-          <Text style={styles.groupDesc} numberOfLines={1}>{item.description}</Text>
-        ) : null}
-        <Text style={styles.memberCount}>
-          {item.memberCount || item.members?.length || 0} members
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
+        <View style={styles.groupInfo}>
+          <View style={styles.groupTopRow}>
+            <Text style={styles.groupName} numberOfLines={1}>{item.groupName || item.name}</Text>
+            {item.lastActivityTime && (
+              <Text style={styles.lastTime}>{getRelativeTime(item.lastActivityTime)}</Text>
+            )}
+          </View>
+          {item.lastActivityMessage ? (
+            <Text style={styles.lastMessage} numberOfLines={1}>{item.lastActivityMessage}</Text>
+          ) : item.description ? (
+            <Text style={styles.groupDesc} numberOfLines={1}>{item.description}</Text>
+          ) : null}
+          <View style={styles.memberBadge}>
+            <MaterialCommunityIcons name="account-multiple" size={12} color={colors.primary} />
+            <Text style={styles.memberCount}>
+              {item.memberCount || item.members?.length || 0} members
+            </Text>
+          </View>
+        </View>
+        <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textTertiary} />
+      </TouchableOpacity>
+    );
+  };
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#3498db" />
-      </View>
+      <SafeAreaView style={styles.centerContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </SafeAreaView>
     );
   }
 
   if (error && groups.length === 0) {
     return (
-      <View style={styles.centerContainer}>
-        <MaterialCommunityIcons name="alert-circle-outline" size={40} color="#7f8c8d" style={{marginBottom: 10}} />
-        <Text style={{fontSize: 16, fontWeight: '600', color: '#2c3e50', marginBottom: 6}}>Failed to Load Groups</Text>
-        <Text style={{color: '#7f8c8d', marginBottom: 16}}>Check your connection and try again.</Text>
-        <TouchableOpacity style={{backgroundColor: '#3498db', paddingVertical: 10, paddingHorizontal: 24, borderRadius: 8}} onPress={fetchGroups}>
-          <Text style={{color: '#fff', fontWeight: '600'}}>Retry</Text>
+      <SafeAreaView style={styles.centerContainer}>
+        <MaterialCommunityIcons name="alert-circle-outline" size={48} color={colors.textTertiary} />
+        <Text style={styles.errorTitle}>Failed to Load Groups</Text>
+        <Text style={styles.errorSub}>Check your connection and try again.</Text>
+        <TouchableOpacity style={[components.buttonPrimary, { marginTop: spacing.lg }]} onPress={fetchGroups}>
+          <Text style={[typography.button, { color: colors.textInverse }]}>Retry</Text>
         </TouchableOpacity>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Care Groups</Text>
-      
-      {loading ? (
-        <ActivityIndicator size="large" color="#3498db" style={{ marginTop: 40 }} />
-      ) : (
-        <FlatList
-          data={groups}
-          keyExtractor={item => item.id.toString()}
-          renderItem={renderItem}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <MaterialCommunityIcons name="account-group-outline" size={48} color="#bdc3c7" style={{marginBottom: 12}} />
-              <Text style={styles.emptyText}>No groups yet</Text>
-              <Text style={styles.emptySubtext}>Create a care group to share medication updates with family</Text>
-            </View>
-          }
-          contentContainerStyle={{ paddingBottom: 80 }}
-        />
-      )}
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.title}>Care Groups</Text>
+        <TouchableOpacity
+          style={styles.addBtn}
+          onPress={() => navigation.navigate('AddGroup')}
+        >
+          <MaterialCommunityIcons name="plus" size={20} color={colors.textInverse} />
+        </TouchableOpacity>
+      </View>
 
-      <TouchableOpacity 
-        style={styles.createButton}
-        onPress={() => navigation.navigate('AddGroup')}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.createButtonText}>+ Create New Group</Text>
-      </TouchableOpacity>
-    </View>
+      <FlatList
+        data={groups}
+        keyExtractor={item => item.id.toString()}
+        renderItem={renderItem}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <View style={styles.emptyIcon}>
+              <MaterialCommunityIcons name="account-group-outline" size={48} color={colors.textTertiary} />
+            </View>
+            <Text style={styles.emptyTitle}>No groups yet</Text>
+            <Text style={styles.emptySubtext}>Create a care group to share medication updates with family or caregivers</Text>
+            <TouchableOpacity
+              style={[components.buttonPrimary, { marginTop: spacing.xl }]}
+              onPress={() => navigation.navigate('AddGroup')}
+            >
+              <Text style={[typography.button, { color: colors.textInverse }]}>Create First Group</Text>
+            </TouchableOpacity>
+          </View>
+        }
+        contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: 120, flexGrow: 1 }}
+        showsVerticalScrollIndicator={false}
+      />
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    padding: 20, 
-    backgroundColor: '#f5f7fa',
-  },
+  container: { flex: 1, backgroundColor: colors.background },
   centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f5f7fa',
+    flex: 1, justifyContent: 'center', alignItems: 'center',
+    backgroundColor: colors.background, padding: spacing.xxl,
   },
-  title: { 
-    fontSize: 24, 
-    fontWeight: '800', 
-    color: '#2c3e50', 
-    marginBottom: 16,
-    marginTop: 10,
+  errorTitle: { ...typography.h3, marginTop: spacing.md },
+  errorSub: { ...typography.caption, marginTop: spacing.xs },
+
+  // Header
+  header: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: spacing.xl, paddingTop: 50, paddingBottom: spacing.lg,
+    backgroundColor: colors.surface,
   },
-  
+  title: { ...typography.h1 },
+  addBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center',
+    ...shadows.colored(colors.primary),
+  },
+
+  // Group card
   groupCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 14,
-    marginBottom: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: colors.surface, padding: spacing.lg,
+    borderRadius: radii.xl, marginTop: spacing.md,
+    ...shadows.sm,
   },
-  groupIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#e8f4fd',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
+  groupAvatar: {
+    width: 48, height: 48, borderRadius: 24,
+    alignItems: 'center', justifyContent: 'center', marginRight: spacing.md,
   },
-  groupIconText: { fontSize: 22 },
-  groupInfo: { flex: 1 },
-  groupName: { fontSize: 16, fontWeight: '700', color: '#2c3e50' },
-  groupDesc: { fontSize: 13, color: '#7f8c8d', marginTop: 2 },
-  memberCount: { fontSize: 12, color: '#3498db', fontWeight: '600', marginTop: 4 },
-  lastMessage: { fontSize: 13, color: '#7f8c8d', marginTop: 2 },
-  lastTime: { fontSize: 11, color: '#95a5a6' },
+  groupAvatarText: { fontSize: 20, fontFamily: fonts.bold },
+  groupInfo: { flex: 1, marginRight: spacing.sm },
+  groupTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  groupName: { fontSize: 15, fontFamily: fonts.semiBold, color: colors.text, flex: 1, marginRight: spacing.sm },
+  lastTime: { fontSize: 11, fontFamily: fonts.regular, color: colors.textTertiary },
+  lastMessage: { fontSize: 13, fontFamily: fonts.regular, color: colors.textSecondary, marginTop: 3 },
+  groupDesc: { fontSize: 13, fontFamily: fonts.regular, color: colors.textTertiary, marginTop: 3 },
+  memberBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  memberCount: { fontSize: 12, fontFamily: fonts.semiBold, color: colors.primary },
 
-  emptyContainer: { alignItems: 'center', paddingTop: 60 },
-  emptyIcon: { fontSize: 48, marginBottom: 12 },
-  emptyText: { fontSize: 18, fontWeight: '700', color: '#2c3e50', marginBottom: 6 },
-  emptySubtext: { fontSize: 14, color: '#95a5a6', textAlign: 'center', paddingHorizontal: 40 },
-
-  createButton: {
-    position: 'absolute',
-    bottom: 100,
-    left: 20,
-    right: 20,
-    backgroundColor: '#3498db',
-    paddingVertical: 15,
-    borderRadius: 14,
-    alignItems: 'center',
-    elevation: 4,
-    shadowColor: '#3498db',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+  // Empty
+  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xxl },
+  emptyIcon: {
+    width: 80, height: 80, borderRadius: 40, backgroundColor: colors.primaryBg,
+    alignItems: 'center', justifyContent: 'center', marginBottom: spacing.lg,
   },
-  createButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  emptyTitle: { ...typography.h3, marginBottom: spacing.sm },
+  emptySubtext: { ...typography.caption, textAlign: 'center', lineHeight: 20 },
 });
 
 export default GroupScreen;
