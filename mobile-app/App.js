@@ -19,6 +19,7 @@ import { setupNotificationActions, addNotificationActionListener } from './src/s
 import BiometricGate from './src/components/BiometricGate';
 import { colors, fonts, tabBar, radii, shadows } from './src/theme';
 import { ToastProvider } from './src/components/Toast';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
@@ -176,24 +177,33 @@ const tabStyles = StyleSheet.create({
   tabItem: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 3,
   },
   activeDot: {
     width: tabBar.activeDotSize,
     height: tabBar.activeDotSize,
     borderRadius: tabBar.activeDotSize / 2,
     backgroundColor: colors.primary,
-    marginTop: 3,
+    marginTop: 2,
   },
   scanButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    marginBottom: 28,
     ...shadows.colored(colors.primary),
+    ...Platform.select({
+      android: { elevation: 8 },
+      ios: {
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.35,
+        shadowRadius: 8,
+      },
+    }),
   },
 });
 
@@ -272,13 +282,15 @@ export default function App() {
   }
 
   return (
-    <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
-      <StatusBar style="dark" />
-      <AuthProvider>
-        <ToastProvider>
-          <AppNav />
-        </ToastProvider>
-      </AuthProvider>
-    </View>
+    <SafeAreaProvider>
+      <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+        <StatusBar style="dark" />
+        <AuthProvider>
+          <ToastProvider>
+            <AppNav />
+          </ToastProvider>
+        </AuthProvider>
+      </View>
+    </SafeAreaProvider>
   );
 }

@@ -234,9 +234,9 @@ const GroupChatScreen = ({ route, navigation }) => {
 
             <View style={styles.messageRow}>
               <View style={[styles.eventDot, { backgroundColor: ev.accent }]}>
-                <MaterialCommunityIcons name={ev.icon} size={12} color={colors.textInverse} />
+                <MaterialCommunityIcons name={ev.icon} size={10} color={colors.textInverse} />
               </View>
-              <Text style={styles.bubbleMessage}>{cleanMessage || item.message}</Text>
+              <Text style={styles.bubbleMessage} numberOfLines={3}>{cleanMessage || item.message}</Text>
             </View>
 
             <Text style={styles.bubbleTime}>{getTimeLabel(item.timestamp)}</Text>
@@ -356,16 +356,16 @@ const styles = StyleSheet.create({
 
   // Avatar
   avatar: {
-    width: 28, height: 28, borderRadius: 14,
+    width: 24, height: 24, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center',
-    marginRight: spacing.xs,
+    marginRight: 4,
   },
-  avatarText: { fontSize: 12, fontFamily: fonts.bold },
+  avatarText: { fontSize: 10, fontFamily: fonts.bold },
 
   // Bubble
   bubble: {
-    maxWidth: '82%', paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderRadius: radii.lg,
+    paddingHorizontal: spacing.sm + 2, paddingVertical: spacing.xs + 2,
+    borderRadius: radii.md,
     ...shadows.sm,
   },
   bubbleSelf: {
@@ -377,16 +377,16 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: radii.xs,
   },
 
-  bubbleName: { fontSize: 12, fontFamily: fonts.bold, marginBottom: 2 },
+  bubbleName: { fontSize: 11, fontFamily: fonts.bold, marginBottom: 1 },
 
-  messageRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  messageRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   eventDot: {
-    width: 20, height: 20, borderRadius: 10,
+    width: 16, height: 16, borderRadius: 8,
     alignItems: 'center', justifyContent: 'center',
   },
-  bubbleMessage: { fontSize: 14, fontFamily: fonts.regular, color: colors.text, lineHeight: 20, flex: 1 },
+  bubbleMessage: { fontSize: 13, fontFamily: fonts.regular, color: colors.text, lineHeight: 18, flex: 1 },
   bubbleTime: {
-    fontSize: 10, fontFamily: fonts.regular, color: colors.textTertiary, marginTop: spacing.xs, textAlign: 'right',
+    fontSize: 9, fontFamily: fonts.regular, color: colors.textTertiary, marginTop: 2, textAlign: 'right',
   },
 
   // FAB

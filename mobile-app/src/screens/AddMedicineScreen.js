@@ -1,8 +1,9 @@
 import React, { useState, useContext, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Alert,
-  ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform, SafeAreaView,
+  ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import api from '../api/client';
@@ -40,6 +41,17 @@ const DAYS_OF_WEEK = [
 ];
 
 const TYPE_COLOR = (key) => colors.medicineTypes[key?.toLowerCase()] || colors.textTertiary;
+
+// Strip manufacturer/corporation names from drug names
+const cleanDrugName = (name) => {
+  if (!name) return '';
+  // Remove common suffixes like "by XYZ Ltd", "- XYZ Corp", "(XYZ Pharma)"
+  return name
+    .replace(/\s*[\(\[].*?[\)\]]\s*$/g, '')  // Remove trailing (parenthetical)
+    .replace(/\s*[-–]\s*(by\s)?[\w\s]*(Ltd|Corp|Inc|Pharma|Labs|Healthcare|Pvt|Limited|Laboratories).*$/i, '')
+    .replace(/\s*by\s+[\w\s]*(Ltd|Corp|Inc|Pharma|Labs|Healthcare|Pvt|Limited|Laboratories).*$/i, '')
+    .trim();
+};
 
 const AddMedicineScreen = ({ navigation, route }) => {
   const { userInfo } = useContext(AuthContext);
@@ -192,7 +204,8 @@ const AddMedicineScreen = ({ navigation, route }) => {
   const goNext = () => {
     if (step === 1) {
       if (!name.trim()) { toast.error('Please enter a medicine name.'); return; }
-      if (!doseAmount.trim()) { toast.error('Please enter a dosage.'); return; }
+      // doseAmount is optional, defaults to '1'
+      if (!doseAmount.trim()) setDoseAmount('1');
       setStep(2);
       scrollRef.current?.scrollTo({ y: 0, animated: true });
     } else if (step === 2) {
@@ -315,9 +328,10 @@ const AddMedicineScreen = ({ navigation, route }) => {
                     <ScrollView style={{ maxHeight: 200 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
                       {searchResults.map((item, idx) => (
                         <TouchableOpacity key={idx} style={styles.dropdownItem} onPress={() => selectSuggestion(item)}>
-                          <Text style={styles.dropdownName}>{item.name || item.medicineName}</Text>
-                          {item.saltName && <Text style={styles.dropdownSub}>{item.saltName}</Text>}
-                          {item.manufacturer && <Text style={styles.dropdownMfg}>{item.manufacturer}</Text>}
+                          <Text style={styles.dropdownName} numberOfLines={1}>
+                            {cleanDrugName(item.name || item.medicineName)}
+                          </Text>
+                          {item.saltName && <Text style={styles.dropdownSub} numberOfLines={1}>{item.saltName}</Text>}
                         </TouchableOpacity>
                       ))}
                     </ScrollView>
@@ -332,10 +346,10 @@ const AddMedicineScreen = ({ navigation, route }) => {
                     <MaterialCommunityIcons name="information-outline" size={16} color={colors.primary} />
                     <Text style={styles.drugInfoTitle}>Drug Information</Text>
                   </View>
-                  {drugInfo.saltName && <InfoRow label="Salt/Generic" value={drugInfo.saltName} />}
-                  {drugInfo.manufacturer && <InfoRow label="Manufacturer" value={drugInfo.manufacturer} />}
-                  {drugInfo.therapeuticClass && <InfoRow label="Class" value={drugInfo.therapeuticClass} />}
-                  {drugInfo.price && <InfoRow label="MRP" value={`₹${drugInfo.price}`} />}
+                  {drugInfo.saltName && <InfoRow label="Composition" value={drugInfo.saltName} />}
+                  {drugInfo.therapeuticClass && <InfoRow label="Category" value={drugInfo.therapeuticClass} />}
+                  {drugInfo.sideEffects && <InfoRow label="Side Effects" value={drugInfo.sideEffects} />}
+                  {drugInfo.uses && <InfoRow label="Uses" value={drugInfo.uses} />}
                 </View>
               )}
 

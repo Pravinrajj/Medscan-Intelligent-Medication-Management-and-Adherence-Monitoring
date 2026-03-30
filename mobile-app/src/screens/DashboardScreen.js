@@ -1,8 +1,9 @@
-import React, { useState, useCallback, useContext, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, RefreshControl,
-  ActivityIndicator, TouchableOpacity, Alert, SafeAreaView,
+  ActivityIndicator, TouchableOpacity, Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
@@ -14,7 +15,24 @@ import WeekStrip from '../components/WeekStrip';
 import StockRing from '../components/StockRing';
 import { useToast } from '../components/Toast';
 import offlineSyncService from '../services/OfflineSyncService';
+import { rescheduleAllReminders } from '../services/NotificationService';
 import { colors, fonts, spacing, radii, shadows, typography, components } from '../theme';
+
+// Locale-safe date to ISO string (avoids UTC timezone shift)
+const toLocalISO = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+// Time-of-day greeting
+const getGreeting = () => {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good Morning';
+  if (h < 17) return 'Good Afternoon';
+  return 'Good Evening';
+};
 
 // Track which bundles are collapsed (persists during session)
 let collapsedBundlesState = {};
@@ -53,7 +71,8 @@ const DashboardScreen = ({ navigation }) => {
   const [isFromCache, setIsFromCache] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [activeFilter, setActiveFilter] = useState('all');
-  const [chartMode, setChartMode] = useState('week'); // 'week' or 'month'
+  const [chartMode, setChartMode] = useState('week');
+  const notifScheduled = useRef(false);
 
   useEffect(() => {
     const unsub = offlineSyncService.subscribe(status => {
@@ -88,6 +107,12 @@ const DashboardScreen = ({ navigation }) => {
         statsRes.data.todayLogs.forEach(log => logged.add(log.scheduleId));
       }
       setLoggedSchedules(logged);
+
+      // Re-schedule all notifications on first load
+      if (!notifScheduled.current) {
+        notifScheduled.current = true;
+        rescheduleAllReminders(userInfo.id, schedData).catch(() => {});
+      }
 
       // Cache
       const cacheData = {
@@ -236,8 +261,8 @@ const DashboardScreen = ({ navigation }) => {
   };
 
   // ─── Computed Values ───────────────────────────────────────────
-  const todayISO = new Date().toISOString().split('T')[0];
-  const selectedISO = selectedDate.toISOString().split('T')[0];
+  const todayISO = toLocalISO(new Date());
+  const selectedISO = toLocalISO(selectedDate);
   const isToday = todayISO === selectedISO;
 
   const todayTaken = stats?.takenCount || 0;
@@ -268,6 +293,12 @@ const DashboardScreen = ({ navigation }) => {
   }, [stats?.dailyBreakdown]);
 
   const currentPeriodStats = chartMode === 'week' ? weeklyStats : monthlyStats;
+
+  // Pending dose count for header badge
+  const pendingCount = useMemo(() => {
+    if (!isToday) return 0;
+    return schedules.filter(s => !loggedSchedules.has(s.id) && !snoozedSchedules.has(s.id)).length;
+  }, [schedules, loggedSchedules, snoozedSchedules, isToday]);
 
   // Marked dates (dates with schedules)
   const markedDates = useMemo(() => {
@@ -334,15 +365,27 @@ const DashboardScreen = ({ navigation }) => {
       >
         {/* ── Header ──────────────────────────────────────────── */}
         <View style={styles.header}>
-          <View>
-            <Text style={styles.welcomeLabel}>Welcome Back,</Text>
-            <Text style={styles.username}>{userInfo.fullName || userInfo.username}</Text>
+          <View style={styles.headerLeft}>
+            <View style={styles.headerAvatar}>
+              <Text style={styles.headerAvatarText}>
+                {(userInfo.fullName || userInfo.username || 'U')[0].toUpperCase()}
+              </Text>
+            </View>
+            <View>
+              <Text style={styles.welcomeLabel}>{getGreeting()},</Text>
+              <Text style={styles.username}>{userInfo.fullName || userInfo.username}</Text>
+            </View>
           </View>
           <TouchableOpacity
             style={styles.headerAction}
-            onPress={() => navigation.navigate('ScanPrescription')}
+            onPress={() => navigation.navigate('AddMedicine')}
           >
-            <MaterialCommunityIcons name="line-scan" size={22} color={colors.primary} />
+            <MaterialCommunityIcons name="plus" size={22} color={colors.primary} />
+            {pendingCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{pendingCount > 9 ? '9+' : pendingCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -360,15 +403,19 @@ const DashboardScreen = ({ navigation }) => {
           </View>
         )}
 
-        {/* ── Dual Circular Charts ────────────────────────────── */}
+        {/* ── Dual Circular Charts ────────────────────────── */}
         <View style={styles.chartsRow}>
-          {/* Today's Progress */}
+          {/* Today's Progress — multi-segment */}
           <View style={styles.chartCard}>
             <Text style={styles.chartLabel}>Today</Text>
             <CircularProgress
               size={110}
               strokeWidth={10}
-              progress={todayProgress}
+              segments={[
+                { value: stats?.takenCount || 0, color: colors.taken },
+                { value: stats?.missedCount || 0, color: colors.missed },
+                { value: stats?.snoozedCount || 0, color: colors.snoozed },
+              ]}
               label={`${todayTaken}/${todayTotal || schedules.length}`}
               sublabel="doses"
             />
@@ -578,16 +625,35 @@ const styles = StyleSheet.create({
   // Header
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: spacing.xl, paddingTop: 50, paddingBottom: spacing.xl,
+    paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.lg,
     backgroundColor: colors.surface,
     borderBottomLeftRadius: radii.xxl, borderBottomRightRadius: radii.xxl,
     ...shadows.sm,
   },
-  welcomeLabel: { ...typography.caption, color: colors.textTertiary },
-  username: { ...typography.h2, marginTop: 2 },
+  headerLeft: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+  },
+  headerAvatar: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center',
+  },
+  headerAvatarText: {
+    fontSize: 18, fontFamily: fonts.bold, color: colors.textInverse,
+  },
+  welcomeLabel: { fontSize: 12, fontFamily: fonts.medium, color: colors.textTertiary },
+  username: { fontSize: 18, fontFamily: fonts.bold, color: colors.text, marginTop: 1 },
   headerAction: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: colors.primaryBg, alignItems: 'center', justifyContent: 'center',
+  },
+  badge: {
+    position: 'absolute', top: -4, right: -4,
+    width: 20, height: 20, borderRadius: 10,
+    backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: colors.surface,
+  },
+  badgeText: {
+    fontSize: 10, fontFamily: fonts.bold, color: colors.textInverse,
   },
 
   // Banners
@@ -613,6 +679,7 @@ const styles = StyleSheet.create({
   chartCard: {
     flex: 1, backgroundColor: colors.surface, borderRadius: radii.xl,
     paddingVertical: spacing.lg, alignItems: 'center',
+    minHeight: 200,
     ...shadows.sm,
   },
   chartLabel: {

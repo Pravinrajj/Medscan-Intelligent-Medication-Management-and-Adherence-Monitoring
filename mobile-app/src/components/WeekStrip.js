@@ -4,20 +4,21 @@ import { colors, fonts, spacing, radii, shadows } from '../theme';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+const toLocalISO = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
 /**
  * Horizontal week strip showing 7 days centered on today.
- *
- * Props:
- *   selectedDate   - Date object for the selected day
- *   onSelectDate   - (date: Date) => void
- *   markedDates    - Set of ISO date strings that have schedules
  */
 const WeekStrip = ({ selectedDate, onSelectDate, markedDates = new Set() }) => {
   const scrollRef = useRef(null);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // Generate 7 days: 3 before today, today, 3 after
   const days = [];
   for (let i = -3; i <= 3; i++) {
     const d = new Date(today);
@@ -26,8 +27,8 @@ const WeekStrip = ({ selectedDate, onSelectDate, markedDates = new Set() }) => {
     days.push(d);
   }
 
-  const selectedISO = selectedDate ? new Date(selectedDate).toISOString().split('T')[0] : '';
-  const todayISO = today.toISOString().split('T')[0];
+  const selectedISO = selectedDate ? toLocalISO(new Date(selectedDate)) : '';
+  const todayISO = toLocalISO(today);
 
   useEffect(() => {
     // Scroll to center (today) on mount

@@ -14,12 +14,10 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// Notification category with Take / Snooze action buttons
 const MEDICATION_CATEGORY = 'MEDICATION_REMINDER';
 
 /**
  * Register the MEDICATION_REMINDER category with Take + Snooze buttons.
- * Call once on app startup.
  */
 export async function setupNotificationActions() {
   try {
@@ -43,7 +41,6 @@ export async function setupNotificationActions() {
 
 /**
  * Handle notification action responses (Take / Snooze).
- * Returns a subscription you should clean up on unmount.
  */
 export function addNotificationActionListener() {
   return Notifications.addNotificationResponseReceivedListener(async (response) => {
@@ -67,23 +64,21 @@ export function addNotificationActionListener() {
       }
     } else if (actionId === 'SNOOZE' && scheduleId) {
       try {
-        // Cancel the current notification to prevent duplicate snoozes
         if (notificationId) {
           await Notifications.cancelScheduledNotificationAsync(notificationId).catch(() => {});
         }
-
-        // Reschedule for +15 minutes
         const snoozeId = await Notifications.scheduleNotificationAsync({
           content: {
             title: 'Snoozed Reminder',
             body: `Time to take your ${data.medicineName || 'medication'}`,
             sound: 'default',
             categoryIdentifier: MEDICATION_CATEGORY,
+            ...(Platform.OS === 'android' ? { channelId: 'medication-reminders' } : {}),
             data: { ...data, notificationId: undefined },
           },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-            seconds: 900, // 15 minutes
+            seconds: 900,
           },
         });
         console.log(`[Notifications] Snoozed for 15min, new id: ${snoozeId}`);
@@ -91,7 +86,6 @@ export function addNotificationActionListener() {
         console.error('[Notifications] Snooze failed:', e.message);
       }
     }
-    // Default tap (no specific action) — app opens normally, handled by navigation
   });
 }
 
@@ -114,79 +108,51 @@ export async function registerForPushNotificationsAsync(userId) {
     return null;
   }
 
+  // Android notification channel
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('medication-reminders', {
+      name: 'Medication Reminders',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#0891B2',
+      sound: 'default',
+    });
+  }
+
   try {
     const token = (await Notifications.getExpoPushTokenAsync({
       projectId: '567e7bb9-3f2a-4b8a-b9a1-777eac1ae7ff',
     })).data;
     console.log('[Notifications] Push token:', token);
 
-    // Register token with backend
     if (userId && token) {
-      await api.post('/notifications/token', {
-        userId,
-        token: token,
-      });
+      await api.post('/notifications/token', { userId, token });
     }
-
-    // Android notification channel
-    if (Platform.OS === 'android') {
-      Notifications.setNotificationChannelAsync('medication-reminders', {
-        name: 'Medication Reminders',
-        importance: Notifications.AndroidImportance.HIGH,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#0891B2',
-        sound: 'default',
-      });
-    }
-
     return token;
   } catch (error) {
-    // If Firebase is not configured, fall back to local-only notifications
     console.log('[Notifications] Push registration skipped:', error.message);
-    
-    // Still set up Android channel for local notifications
-    if (Platform.OS === 'android') {
-      Notifications.setNotificationChannelAsync('medication-reminders', {
-        name: 'Medication Reminders',
-        importance: Notifications.AndroidImportance.HIGH,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#0891B2',
-        sound: 'default',
-      });
-    }
     return null;
   }
 }
 
 /**
  * Schedule a daily medication reminder with Take/Snooze action buttons.
- * Includes scheduleId and userId in data for action handling.
+ * Uses dateComponents format required by Expo SDK 54.
  */
 export async function scheduleMedicationReminder(name, hours, minutes, scheduleId, userId) {
   try {
-    // Check global notification preference
     const globalPref = await AsyncStorage.getItem('global_notifications');
     if (globalPref === 'false') {
       console.log(`[Notifications] Global notifications off, skipping ${name}`);
       return null;
     }
 
-    // Check per-schedule notification preference
     if (scheduleId) {
       const schedulePref = await AsyncStorage.getItem(`schedule_notif_${scheduleId}`);
       if (schedulePref === 'false') {
-        console.log(`[Notifications] Notifications off for schedule ${scheduleId}, skipping ${name}`);
+        console.log(`[Notifications] Notifications off for schedule ${scheduleId}`);
         return null;
       }
-    }
-
-    const now = new Date();
-    const trigger = new Date();
-    trigger.setHours(hours, minutes, 0, 0);
-
-    // If the time has already passed today, schedule for tomorrow
-    if (trigger <= now) {
-      trigger.setDate(trigger.getDate() + 1);
     }
 
     const id = await Notifications.scheduleNotificationAsync({
@@ -204,17 +170,50 @@ export async function scheduleMedicationReminder(name, hours, minutes, scheduleI
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
-        hour: hours,
-        minute: minutes,
         repeating: true,
+        dateComponents: {
+          hour: hours,
+          minute: minutes,
+        },
       },
     });
 
-    console.log(`[Notifications] Scheduled reminder for ${name} at ${hours}:${minutes}, id: ${id}`);
+    console.log(`[Notifications] Scheduled reminder for ${name} at ${hours}:${String(minutes).padStart(2, '0')}, id: ${id}`);
     return id;
   } catch (error) {
     console.log('[Notifications] Failed to schedule:', error.message);
     return null;
+  }
+}
+
+/**
+ * Re-schedule all notifications for a user's schedules.
+ * Call on app startup / login to ensure reminders are active.
+ */
+export async function rescheduleAllReminders(userId, schedules) {
+  try {
+    await Notifications.cancelAllScheduledNotificationsAsync();
+
+    let count = 0;
+    for (const schedule of schedules) {
+      if (!schedule.scheduleTimes || schedule.frequencyType === 'AS_NEEDED') continue;
+
+      for (const st of schedule.scheduleTimes) {
+        const timeStr = st.scheduledTime || '';
+        const parts = timeStr.split(':');
+        if (parts.length < 2) continue;
+        const h = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        if (isNaN(h) || isNaN(m)) continue;
+
+        const medName = schedule.medicine?.name || 'Medication';
+        const result = await scheduleMedicationReminder(medName, h, m, schedule.id, userId);
+        if (result) count++;
+      }
+    }
+    console.log(`[Notifications] Re-scheduled ${count} reminders for ${schedules.length} medicines`);
+  } catch (e) {
+    console.log('[Notifications] Bulk reschedule failed:', e.message);
   }
 }
 

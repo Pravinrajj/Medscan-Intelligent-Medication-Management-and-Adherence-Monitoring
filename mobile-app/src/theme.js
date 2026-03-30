@@ -49,6 +49,10 @@ export const colors = {
   overlay: 'rgba(15, 23, 42, 0.5)',   // slate-900 at 50%
   shimmer: '#E2E8F0',
 
+  // Info
+  info: '#3B82F6',          // blue-500
+  infoBg: '#EFF6FF',        // blue-50
+
   // Medicine type colors (for cards, chips)
   medicineTypes: {
     tablet: '#3B82F6',     // blue-500
@@ -265,10 +269,10 @@ export const components = {
 
 // ─── Tab Bar Constants ───────────────────────────────────────────
 export const tabBar = {
-  height: 64,
-  bottomInset: 12,   // distance from screen bottom
+  height: 68,
+  bottomInset: 16,
   horizontalInset: 16,
-  borderRadius: 32,
-  iconSize: 22,
+  borderRadius: 34,
+  iconSize: 24,
   activeDotSize: 5,
 };

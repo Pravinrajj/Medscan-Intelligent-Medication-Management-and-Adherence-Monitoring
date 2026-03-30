@@ -31,27 +31,11 @@ const AddGroupScreen = ({ navigation }) => {
       const groupRes = await api.post(`/groups/create?${params.toString()}`);
       const createdGroup = groupRes.data;
 
-      Alert.alert(
-        'Group Created',
-        'Your group is ready! Add members now?',
-        [
-          {
-            text: 'Later',
-            style: 'cancel',
-            onPress: () => navigation.goBack(),
-          },
-          {
-            text: 'Add Members',
-            onPress: () => {
-              // Navigate to GroupDetails where Add Member modal exists
-              navigation.replace('GroupChat', { group: createdGroup });
-              setTimeout(() => {
-                navigation.navigate('GroupDetails', { group: createdGroup, openAddMember: true });
-              }, 300);
-            },
-          },
-        ]
-      );
+      // Navigate directly to GroupDetails to add members
+      navigation.replace('GroupChat', { group: createdGroup });
+      setTimeout(() => {
+        navigation.navigate('GroupDetails', { group: createdGroup, openAddMember: true });
+      }, 300);
     } catch (e) {
       const msg = e.response?.data?.message || 'Failed to create group.';
       Alert.alert('Error', msg);

@@ -1,77 +1,114 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
-import { colors, fonts, spacing, radii, shadows } from '../theme';
-
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+import { colors, fonts } from '../theme';
 
 /**
- * Circular progress ring with animated fill.
+ * Circular progress ring with multi-segment support.
  *
  * Props:
  *   size        - diameter (default 120)
  *   strokeWidth - ring thickness (default 10)
- *   progress    - 0 to 1
- *   label       - text inside the ring (e.g., "4/6")
- *   sublabel    - smaller text below label (e.g., "doses taken")
- *   color       - ring fill color (default primary)
- *   trackColor  - ring background color
+ *   progress    - 0 to 1 (single color mode)
+ *   segments    - [{value, color}] for multi-segment mode (values are counts, not percentages)
+ *   label       - text inside the ring
+ *   sublabel    - smaller text below label
  */
 const CircularProgress = ({
   size = 120,
   strokeWidth = 10,
   progress = 0,
+  segments = null,
   label = '',
   sublabel = '',
-  color = colors.primary,
-  trackColor = colors.chartTrack,
 }) => {
-  const animatedValue = useRef(new Animated.Value(0)).current;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
 
-  useEffect(() => {
-    Animated.timing(animatedValue, {
-      toValue: Math.min(Math.max(progress, 0), 1),
-      duration: 800,
-      useNativeDriver: false,
-    }).start();
-  }, [progress]);
+  // Multi-segment mode
+  if (segments && segments.length > 0) {
+    const total = segments.reduce((sum, s) => sum + (s.value || 0), 0);
+    let accumulatedOffset = 0;
 
-  const strokeDashoffset = animatedValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: [circumference, 0],
-  });
+    return (
+      <View style={[styles.container, { width: size, height: size }]}>
+        <Svg width={size} height={size} style={{ transform: [{ rotate: '-90deg' }] }}>
+          {/* Track */}
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            stroke={colors.chartTrack}
+            strokeWidth={strokeWidth}
+            fill="none"
+          />
+          {/* Segments - render in reverse so first segment is on top */}
+          {total > 0 && [...segments].reverse().map((seg, i) => {
+            if (!seg.value || seg.value <= 0) return null;
+            const segProgress = seg.value / total;
+            const segLength = segProgress * circumference;
+            // Calculate offset: we draw from end backwards
+            const reverseIndex = segments.length - 1 - i;
+            let offset = 0;
+            for (let j = 0; j < reverseIndex; j++) {
+              offset += (segments[j].value || 0) / total * circumference;
+            }
+            const dashOffset = circumference - offset - segLength;
 
-  // Determine color based on progress if not explicitly set
-  const ringColor = progress >= 0.8
+            return (
+              <Circle
+                key={i}
+                cx={size / 2}
+                cy={size / 2}
+                r={radius}
+                stroke={seg.color}
+                strokeWidth={strokeWidth}
+                fill="none"
+                strokeDasharray={`${segLength} ${circumference - segLength}`}
+                strokeDashoffset={-offset}
+                strokeLinecap="butt"
+              />
+            );
+          })}
+        </Svg>
+        <View style={styles.labelContainer}>
+          <Text style={[styles.label, { fontSize: size * 0.2 }]}>{label}</Text>
+          {sublabel ? (
+            <Text style={[styles.sublabel, { fontSize: size * 0.09 }]}>{sublabel}</Text>
+          ) : null}
+        </View>
+      </View>
+    );
+  }
+
+  // Single color mode
+  const clampedProgress = Math.min(Math.max(progress, 0), 1);
+  const strokeDashoffset = circumference * (1 - clampedProgress);
+
+  const ringColor = clampedProgress >= 0.8
     ? colors.success
-    : progress >= 0.5
+    : clampedProgress >= 0.5
       ? colors.warning
-      : progress > 0
+      : clampedProgress > 0
         ? colors.danger
-        : trackColor;
-
-  const finalColor = color !== colors.primary ? color : ringColor;
+        : colors.chartTrack;
 
   return (
     <View style={[styles.container, { width: size, height: size }]}>
       <Svg width={size} height={size} style={{ transform: [{ rotate: '-90deg' }] }}>
-        {/* Track (background ring) */}
         <Circle
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke={trackColor}
+          stroke={colors.chartTrack}
           strokeWidth={strokeWidth}
           fill="none"
         />
-        {/* Progress ring */}
-        <AnimatedCircle
+        <Circle
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke={finalColor}
+          stroke={ringColor}
           strokeWidth={strokeWidth}
           fill="none"
           strokeDasharray={circumference}
@@ -79,7 +116,6 @@ const CircularProgress = ({
           strokeLinecap="round"
         />
       </Svg>
-      {/* Center text */}
       <View style={styles.labelContainer}>
         <Text style={[styles.label, { fontSize: size * 0.2 }]}>{label}</Text>
         {sublabel ? (

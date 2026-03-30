@@ -1,24 +1,29 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { colors, fonts, spacing, radii, shadows } from '../theme';
 
-/**
- * Determines status for the medicine card.
- * No longer uses a ±10 min window — shows action buttons for ALL unlogged times today.
- * Past unlogged times show "Overdue" label, upcoming show "Next: HH:MM".
- */
+const TYPE_ICONS = {
+  TABLET: 'pill',
+  CAPSULE: 'pill',
+  SYRUP: 'bottle-tonic',
+  INJECTION: 'needle',
+  DROPS: 'eyedropper',
+  INHALER: 'lungs',
+  CREAM: 'lotion-outline',
+  OTHER: 'medical-bag',
+};
+
 const getTimeStatus = (scheduleTimes, frequencyType) => {
-  // AS_NEEDED medicines always show Take button
   if (frequencyType === 'AS_NEEDED') {
-    return { isActive: true, statusText: 'Take as needed', isAsNeeded: true };
+    return { isActive: true, statusText: 'Take as needed', isOverdue: false };
   }
-
   if (!scheduleTimes || scheduleTimes.length === 0) {
-    return { isActive: true, statusText: '', isAsNeeded: false };
+    return { isActive: true, statusText: '', isOverdue: false };
   }
 
   const now = new Date();
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
-
   let hasOverdue = false;
   let overdueLabel = '';
   let closestUpcoming = null;
@@ -27,20 +32,17 @@ const getTimeStatus = (scheduleTimes, frequencyType) => {
     const timeStr = t.scheduledTime || '';
     const parts = timeStr.split(':');
     if (parts.length < 2) continue;
-    
     const h = parseInt(parts[0], 10);
     const m = parseInt(parts[1], 10);
     if (isNaN(h) || isNaN(m)) continue;
-    
+
     const schedMinutes = h * 60 + m;
     const label = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-    
+
     if (schedMinutes <= nowMinutes) {
-      // Past time — overdue if not logged
       hasOverdue = true;
       overdueLabel = label;
     } else {
-      // Upcoming
       if (!closestUpcoming || schedMinutes < closestUpcoming.minutes) {
         closestUpcoming = { minutes: schedMinutes, label };
       }
@@ -48,261 +50,318 @@ const getTimeStatus = (scheduleTimes, frequencyType) => {
   }
 
   if (hasOverdue) {
-    return { isActive: true, statusText: `⚠️ Overdue since ${overdueLabel}`, isAsNeeded: false };
+    return { isActive: true, statusText: `Overdue since ${overdueLabel}`, isOverdue: true };
   }
-  
   if (closestUpcoming) {
-    return { isActive: true, statusText: `Next: ${closestUpcoming.label}`, isAsNeeded: false };
+    return { isActive: true, statusText: `Next at ${closestUpcoming.label}`, isOverdue: false };
   }
-
-  return { isActive: false, statusText: 'All doses done for today', isAsNeeded: false };
+  return { isActive: false, statusText: 'All doses done', isOverdue: false };
 };
 
 const MedicationItem = ({ schedule, onTaken, onMissed, onSnooze, onPress, onUndo, loggedToday, snoozedToday }) => {
   const medicine = schedule?.medicine || {};
   const scheduleTimes = schedule?.scheduleTimes || [];
   const frequencyType = schedule?.frequencyType;
-  
+  const medType = (medicine.type || schedule?.type || 'OTHER').toUpperCase();
+  const typeIcon = TYPE_ICONS[medType] || TYPE_ICONS.OTHER;
+
   const timeStatus = useMemo(() => getTimeStatus(scheduleTimes, frequencyType), [scheduleTimes, frequencyType]);
   const timesDisplay = scheduleTimes
     .map(t => (t.scheduledTime || '').substring(0, 5))
-    .filter(Boolean)
-    .join(', ');
+    .filter(Boolean);
 
-  // Build smart dosage display (no redundant type)
   const dosageText = `${schedule?.doseAmount || '1'} ${schedule?.doseUnit || 'Dose'}`;
   const isAsNeeded = frequencyType === 'AS_NEEDED';
+  const hasStock = schedule?.currentStock != null;
+  const isLowStock = hasStock && schedule.currentStock <= 5;
 
   return (
-    <View style={styles.card}>
-      <TouchableOpacity style={styles.infoSection} onPress={onPress} activeOpacity={onPress ? 0.6 : 1}>
-        <Text style={styles.medName}>{medicine.name || 'Medication'}</Text>
-        <Text style={styles.details}>Take: {dosageText}</Text>
-        
-        {schedule?.currentStock != null && (
-          <Text style={[styles.stock, schedule.currentStock <= 5 ? styles.lowStock : null]}>
-              Stock: {schedule.currentStock} left
-          </Text>
+    <TouchableOpacity
+      style={[styles.card, loggedToday && styles.cardDone, snoozedToday && styles.cardSnoozed]}
+      onPress={onPress}
+      activeOpacity={onPress ? 0.7 : 1}
+    >
+      {/* Top Row: Icon + Name + Status */}
+      <View style={styles.topRow}>
+        <View style={[styles.typeIcon, { backgroundColor: colors.primaryBg }]}>
+          <MaterialCommunityIcons name={typeIcon} size={18} color={colors.primary} />
+        </View>
+        <View style={styles.nameSection}>
+          <Text style={styles.medName} numberOfLines={1}>{medicine.name || 'Medication'}</Text>
+          <Text style={styles.dosage}>{dosageText}</Text>
+        </View>
+        {/* Stock indicator */}
+        {hasStock && (
+          <View style={[styles.stockBadge, isLowStock && styles.stockBadgeLow]}>
+            <MaterialCommunityIcons
+              name={isLowStock ? 'alert-outline' : 'package-variant'}
+              size={12}
+              color={isLowStock ? colors.danger : colors.textTertiary}
+            />
+            <Text style={[styles.stockText, isLowStock && styles.stockTextLow]}>
+              {schedule.currentStock}
+            </Text>
+          </View>
         )}
-        
-        {/* Show times only for scheduled medicines */}
-        {!isAsNeeded && timesDisplay ? (
-          <Text style={styles.time}>⏰ {timesDisplay}</Text>
-        ) : null}
-        
-        {/* Frequency badge for special types */}
+      </View>
+
+      {/* Middle: Time chips + Status */}
+      <View style={styles.middleRow}>
+        {/* Time chips */}
+        {!isAsNeeded && timesDisplay.length > 0 && (
+          <View style={styles.timeChips}>
+            <MaterialCommunityIcons name="clock-outline" size={13} color={colors.textTertiary} />
+            {timesDisplay.map((t, i) => (
+              <View key={i} style={styles.timeChip}>
+                <Text style={styles.timeChipText}>{t}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
         {isAsNeeded && (
-          <View style={styles.asNeededBadge}>
+          <View style={styles.asNeededChip}>
+            <MaterialCommunityIcons name="gesture-tap" size={12} color={colors.info} />
             <Text style={styles.asNeededText}>As Needed</Text>
           </View>
         )}
-        
-        {/* Status indicator */}
-        <Text style={[
-          styles.statusText, 
-          loggedToday ? styles.statusDone :
-          snoozedToday ? styles.statusSnoozed :
-          timeStatus.statusText.includes('Overdue') ? styles.statusOverdue :
-          styles.statusUpcoming
-        ]}>
-          {loggedToday ? '✅ Recorded today' : snoozedToday ? '⏰ Snoozed — will remind again' : timeStatus.statusText}
-        </Text>
-        
-        {onPress && <Text style={styles.tapHint}>Tap for details →</Text>}
-      </TouchableOpacity>
 
-      {/* Action Buttons — always show for unlogged items */}
-      <View style={styles.actions}>
+        {/* Status */}
+        {!loggedToday && !snoozedToday && timeStatus.statusText ? (
+          <View style={[styles.statusChip, timeStatus.isOverdue && styles.statusOverdue]}>
+            <MaterialCommunityIcons
+              name={timeStatus.isOverdue ? 'alert-circle' : 'clock-fast'}
+              size={12}
+              color={timeStatus.isOverdue ? colors.warningDark : colors.textTertiary}
+            />
+            <Text style={[styles.statusText, timeStatus.isOverdue && styles.statusTextOverdue]}>
+              {timeStatus.statusText}
+            </Text>
+          </View>
+        ) : null}
+
+        {loggedToday && (
+          <View style={styles.doneChip}>
+            <MaterialCommunityIcons name="check-circle" size={13} color={colors.success} />
+            <Text style={styles.doneChipText}>Recorded</Text>
+          </View>
+        )}
+
+        {snoozedToday && (
+          <View style={styles.snoozedChip}>
+            <MaterialCommunityIcons name="clock-alert-outline" size={13} color={colors.snoozed} />
+            <Text style={styles.snoozedChipText}>Snoozed</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Bottom: Action buttons */}
+      <View style={styles.actionRow}>
         {loggedToday || snoozedToday ? (
-          <View style={styles.doneRow}>
+          <>
             <View style={styles.doneIndicator}>
-              <Text style={styles.doneText}>{snoozedToday ? 'Snoozed ⏰' : 'Done ✓'}</Text>
+              <MaterialCommunityIcons
+                name={snoozedToday ? 'clock-outline' : 'check-circle-outline'}
+                size={16}
+                color={snoozedToday ? colors.snoozed : colors.success}
+              />
+              <Text style={[styles.doneLabel, snoozedToday && { color: colors.snoozed }]}>
+                {snoozedToday ? 'Snoozed' : 'Done'}
+              </Text>
             </View>
             {onUndo && (
-              <TouchableOpacity style={styles.undoButton} onPress={onUndo}>
-                <Text style={styles.undoButtonText}>Undo</Text>
+              <TouchableOpacity style={styles.undoBtn} onPress={onUndo} activeOpacity={0.7}>
+                <MaterialCommunityIcons name="undo-variant" size={14} color={colors.danger} />
+                <Text style={styles.undoBtnText}>Undo</Text>
               </TouchableOpacity>
             )}
-          </View>
+          </>
         ) : timeStatus.isActive ? (
           <>
-            <TouchableOpacity style={styles.takeButton} onPress={onTaken}>
-              <Text style={styles.takeButtonText}>✓ Take</Text>
+            <TouchableOpacity style={styles.takeBtn} onPress={onTaken} activeOpacity={0.8}>
+              <MaterialCommunityIcons name="check" size={16} color={colors.textInverse} />
+              <Text style={styles.takeBtnText}>Take</Text>
             </TouchableOpacity>
             {!isAsNeeded && onSnooze && (
-              <TouchableOpacity style={styles.snoozeButton} onPress={onSnooze}>
-                <Text style={styles.snoozeButtonText}>⏰</Text>
+              <TouchableOpacity style={styles.snoozeBtn} onPress={onSnooze} activeOpacity={0.8}>
+                <MaterialCommunityIcons name="clock-outline" size={14} color={colors.snoozed} />
               </TouchableOpacity>
             )}
             {!isAsNeeded && onMissed && (
-              <TouchableOpacity style={styles.missButton} onPress={onMissed}>
-                <Text style={styles.missButtonText}>✗ Miss</Text>
+              <TouchableOpacity style={styles.missBtn} onPress={onMissed} activeOpacity={0.8}>
+                <MaterialCommunityIcons name="close" size={14} color={colors.danger} />
+                <Text style={styles.missBtnText}>Miss</Text>
               </TouchableOpacity>
             )}
           </>
         ) : (
           <View style={styles.doneIndicator}>
-            <Text style={styles.doneText}>Done ✓</Text>
+            <MaterialCommunityIcons name="check-all" size={16} color={colors.success} />
+            <Text style={styles.doneLabel}>All done</Text>
+          </View>
+        )}
+
+        {/* Tap hint arrow */}
+        {onPress && (
+          <View style={styles.arrowHint}>
+            <MaterialCommunityIcons name="chevron-right" size={18} color={colors.textTertiary} />
           </View>
         )}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#fff',
-    padding: 15,
-    borderRadius: 12,
-    marginBottom: 10,
-    elevation: 2,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    ...shadows.sm,
   },
-  infoSection: {
+  cardDone: {
+    backgroundColor: colors.successLight || '#F0FDF4',
+    borderLeftWidth: 3,
+    borderLeftColor: colors.success,
+  },
+  cardSnoozed: {
+    backgroundColor: colors.warningLight,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.snoozed,
+  },
+
+  // Top row
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  typeIcon: {
+    width: 36, height: 36, borderRadius: radii.md,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  nameSection: {
     flex: 1,
-    paddingRight: 10,
   },
   medName: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#2c3e50',
+    fontSize: 16, fontFamily: fonts.bold, color: colors.text,
   },
-  details: {
-    color: '#7f8c8d',
-    fontSize: 13,
-    marginTop: 2,
+  dosage: {
+    fontSize: 12, fontFamily: fonts.medium, color: colors.textSecondary, marginTop: 1,
   },
-  time: {
-    marginTop: 5,
-    fontWeight: '600',
-    color: '#4a90e2',
-    fontSize: 13,
+  stockBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingHorizontal: spacing.sm, paddingVertical: 3,
+    borderRadius: radii.full, backgroundColor: colors.surfaceHover,
   },
-  stock: {
-    fontSize: 12,
-    marginTop: 2,
-    color: '#27ae60',
+  stockBadgeLow: {
+    backgroundColor: colors.dangerLight || '#FEF2F2',
   },
-  lowStock: {
-    color: '#e74c3c',
-    fontWeight: 'bold',
+  stockText: {
+    fontSize: 11, fontFamily: fonts.semiBold, color: colors.textTertiary,
   },
-  asNeededBadge: {
-    backgroundColor: '#f0f0ff',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-    marginTop: 4,
+  stockTextLow: {
+    color: colors.danger,
+  },
+
+  // Middle row
+  middleRow: {
+    flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap',
+    gap: spacing.xs, marginTop: spacing.sm,
+    paddingLeft: 36 + spacing.sm, // align with name
+  },
+  timeChips: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+  },
+  timeChip: {
+    backgroundColor: colors.surfaceHover,
+    paddingHorizontal: 6, paddingVertical: 2,
+    borderRadius: radii.sm,
+  },
+  timeChipText: {
+    fontSize: 11, fontFamily: fonts.semiBold, color: colors.textSecondary,
+  },
+  asNeededChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: colors.infoBg || '#EFF6FF',
+    paddingHorizontal: spacing.sm, paddingVertical: 2,
+    borderRadius: radii.full,
   },
   asNeededText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#6c5ce7',
+    fontSize: 11, fontFamily: fonts.semiBold, color: colors.info || '#3B82F6',
   },
+
+  statusChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+  },
+  statusOverdue: {},
   statusText: {
-    fontSize: 11,
-    marginTop: 4,
-    fontWeight: '600',
+    fontSize: 11, fontFamily: fonts.medium, color: colors.textTertiary,
   },
-  statusDone: {
-    color: '#27ae60',
+  statusTextOverdue: {
+    color: colors.warningDark, fontFamily: fonts.semiBold,
   },
-  statusOverdue: {
-    color: '#e67e22',
+
+  doneChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
   },
-  statusUpcoming: {
-    color: '#95a5a6',
+  doneChipText: {
+    fontSize: 11, fontFamily: fonts.semiBold, color: colors.success,
   },
-  statusSnoozed: {
-    color: '#f39c12',
+  snoozedChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
   },
-  tapHint: {
-    fontSize: 11,
-    color: '#bdc3c7',
-    marginTop: 4,
+  snoozedChipText: {
+    fontSize: 11, fontFamily: fonts.semiBold, color: colors.snoozed,
   },
-  actions: {
-    alignItems: 'center',
-    gap: 6,
-    flexShrink: 0,
-    minWidth: 80,
+
+  // Action row
+  actionRow: {
+    flexDirection: 'row', alignItems: 'center',
+    gap: spacing.sm, marginTop: spacing.sm,
+    paddingLeft: 36 + spacing.sm,
   },
-  takeButton: {
-    backgroundColor: '#2ecc71',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    minWidth: 70,
-    alignItems: 'center',
+  takeBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: colors.success, paddingVertical: 7,
+    paddingHorizontal: spacing.md, borderRadius: radii.full,
   },
-  takeButtonText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 13,
+  takeBtnText: {
+    fontSize: 13, fontFamily: fonts.bold, color: colors.textInverse,
   },
-  snoozeButton: {
-    backgroundColor: '#f39c12',
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 18,
-    minWidth: 50,
-    alignItems: 'center',
+  snoozeBtn: {
+    width: 34, height: 34, borderRadius: 17,
+    borderWidth: 1.5, borderColor: colors.snoozed,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.surface,
   },
-  snoozeButtonText: {
-    fontSize: 16,
+  missBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingVertical: 7, paddingHorizontal: spacing.md,
+    borderRadius: radii.full, borderWidth: 1.5,
+    borderColor: colors.danger, backgroundColor: colors.surface,
   },
-  missButton: {
-    backgroundColor: '#fff',
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#e74c3c',
-    minWidth: 70,
-    alignItems: 'center',
-  },
-  missButtonText: {
-    color: '#e74c3c',
-    fontWeight: '600',
-    fontSize: 12,
+  missBtnText: {
+    fontSize: 12, fontFamily: fonts.semiBold, color: colors.danger,
   },
   doneIndicator: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    backgroundColor: '#eafaf1',
+    flexDirection: 'row', alignItems: 'center', gap: 4,
   },
-  doneText: {
-    color: '#27ae60',
-    fontWeight: '700',
-    fontSize: 13,
+  doneLabel: {
+    fontSize: 13, fontFamily: fonts.semiBold, color: colors.success,
   },
-  doneRow: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 4,
+  undoBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingVertical: 4, paddingHorizontal: spacing.sm,
+    borderRadius: radii.full, backgroundColor: colors.dangerLight || '#FEF2F2',
   },
-  undoButton: {
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    backgroundColor: '#fef2f2',
-    borderWidth: 1,
-    borderColor: '#fecaca',
+  undoBtnText: {
+    fontSize: 11, fontFamily: fonts.semiBold, color: colors.danger,
   },
-  undoButtonText: {
-    color: '#e74c3c',
-    fontWeight: '600',
-    fontSize: 11,
+  arrowHint: {
+    marginLeft: 'auto',
   },
 });
 
-export default MedicationItem;
+export default React.memo(MedicationItem);
