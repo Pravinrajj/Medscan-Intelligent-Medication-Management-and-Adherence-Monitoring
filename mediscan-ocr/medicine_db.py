@@ -254,7 +254,8 @@ def lookup_medicine(
                     details=details,
                 )
 
-        # ── Strategy 2: Fuzzy match on product_name ───────────────
+        # ── Strategy 2: Fuzzy match on product_name (token_sort_ratio) ─
+        # token_sort_ratio handles word-order differences well
         best_product = process.extractOne(
             cleaned,
             _product_names,
@@ -270,7 +271,39 @@ def lookup_medicine(
             score_cutoff=threshold,
         )
 
-        # Pick the best match between product_name and salt_composition
+        # ── Strategy 4: partial_ratio fallback ────────────────────
+        # partial_ratio checks whether the query is a SUBSTRING of a DB entry.
+        # Tiered thresholds prevent false positives on short words:
+        #   - Short words (4-6 alpha chars): require ≥95% — only near-exact
+        #     substring matches accepted (e.g. 'DOLO' inside 'Dolo 650mg Tablet' = 100%)
+        #   - Long words (≥7 alpha chars): require ≥88% — 'Paracetamol' inside
+        #     'Paracetamol 500mg Tablets' = 100%
+        # Words with <4 alpha chars are too short for any substring matching.
+        PARTIAL_MIN_ALPHA = 4
+
+        cleaned_alpha_len = len(re.sub(r'[^a-zA-Z]', '', cleaned))
+        best_partial_product = None
+        best_partial_salt    = None
+        partial_cutoff       = 0.0  # will be set below if applicable
+
+        if cleaned_alpha_len >= PARTIAL_MIN_ALPHA:
+            # Tiered threshold: stricter for shorter queries
+            partial_cutoff = 95.0 if cleaned_alpha_len < 7 else 88.0
+
+            best_partial_product = process.extractOne(
+                cleaned,
+                _product_names,
+                scorer=fuzz.partial_ratio,
+                score_cutoff=partial_cutoff,
+            )
+            best_partial_salt = process.extractOne(
+                cleaned,
+                _salt_names,
+                scorer=fuzz.partial_ratio,
+                score_cutoff=partial_cutoff,
+            )
+
+        # Pick the best match across all strategies
         best_match = None
         best_score = 0.0
         best_field = None
@@ -287,6 +320,19 @@ def lookup_medicine(
             best_score = best_salt[1]
             best_field = "salt_composition"
             best_index = best_salt[2]
+
+        # Accept partial match only if it beats the current best AND clears the partial threshold
+        if best_partial_product and best_partial_product[1] > best_score:
+            best_match = best_partial_product[0]
+            best_score = best_partial_product[1]
+            best_field = "product_name (partial)"
+            best_index = best_partial_product[2]
+
+        if best_partial_salt and best_partial_salt[1] > best_score:
+            best_match = best_partial_salt[0]
+            best_score = best_partial_salt[1]
+            best_field = "salt_composition (partial)"
+            best_index = best_partial_salt[2]
 
         if best_match and best_score >= threshold:
             details = _get_details(best_index)
