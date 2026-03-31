@@ -1,4 +1,4 @@
-# MediScan OCR — Dependencies
+# MediScan OCR — Dependencies (Google Cloud Vision backend)
 # ====================================
 
 # Web framework
@@ -6,8 +6,8 @@ fastapi==0.115.6
 uvicorn==0.34.0
 python-multipart==0.0.20
 
-# OCR engine
-easyocr>=1.7.0
+# Google Cloud Vision (replaces EasyOCR)
+google-cloud-vision>=3.7.0
 
 # Image processing
 opencv-python-headless>=4.8.0
@@ -17,3 +17,6 @@ numpy>=1.24.0
 # Medicine database
 pandas>=2.0.0
 rapidfuzz>=3.0.0
+
+# Optional: load credentials from a .env file
+python-dotenv>=1.0.0

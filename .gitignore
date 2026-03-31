@@ -65,7 +65,37 @@ coverage/
 # =========================
 # Large Dataset Files
 # =========================
-dataset/*.csv
-!dataset/README.md
+dataset/
 medicine_data.csv
 *.csv
+
+# =========================
+# Sample / Test Images
+# =========================
+*.jpg
+*.jpeg
+*.png
+*.svg
+# Keep images inside mobile app assets
+!mobile-app/**/*.png
+!mobile-app/**/*.jpg
+!mobile-app/**/*.svg
+
+# =========================
+# Reports & Documentation (non-essential)
+# =========================
+PROGRESS_REPORT.md
+PROJECT_DOCUMENTATION.md
+PROJECT_STATUS.md
+
+# =========================
+# Python (global)
+# =========================
+__pycache__/
+*.pyc
+
+# =========================
+# Mediscan OCR temp files
+# =========================
+mediscan-ocr/__pycache__/
+mediscan-ocr/temp/

@@ -1,14 +1,22 @@
 """
-MediScan OCR — Prescription Text Parser (v3)
+MediScan OCR — Prescription Text Parser (v4)
 ==============================================
 Parses cleaned and grouped OCR text lines into structured medicine data.
-Optimized for noisy handwritten prescription output:
+Optimized for noisy handwritten prescription output.
 
-  - Handles fragmented/garbled text after cleaning
-  - Extracts medicine name, dosage, frequency from grouped lines
-  - Preserves multiple medicines across different lines
-  - Relaxed regex patterns for noisy input
-  - Fuzzy medicine name correction via curated dictionary
+Strategy order (per line):
+  0. DB-first  — check every significant word/bigram against the 195K
+                 medicine database; avoids needing a "Tab/Cap" prefix.
+  1. Full-line — regex for "Tab Paracetamol 500mg BD" style lines.
+  2. Component — regex prefix + individual dosage/frequency extraction.
+  3. Standalone — capitalized words matched against COMMON_MEDICINES dict.
+  4. Fallback  — significant words when a dosage/freq is present nearby.
+
+Changes from v3:
+  - Strategy 0 (DB-first) added as the primary extraction path.
+  - parse_lines() passes line text through DB lookup before any regex.
+  - Multi-word chunks (bigrams) are tried so compound names like
+    "Mefenamic Acid" or "Cetirizine HCl" are found even without a prefix.
 """
 
 import re
@@ -31,7 +39,7 @@ class MedicineEntry:
     frequency: Optional[str] = None
     confidence: Optional[float] = None
     corrected_name: Optional[str] = None
-    raw_line: Optional[str] = None  # Source line for debugging
+    raw_line: Optional[str] = None
 
     def to_dict(self) -> dict:
         result = {
@@ -49,62 +57,49 @@ class MedicineEntry:
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Regex Patterns (relaxed for noisy input)
+# Regex Patterns
 # ═══════════════════════════════════════════════════════════════════
 
-# Drug form prefix — also matches common OCR garble (T4b, C4p, etc.)
 DRUG_PREFIX = (
     r'(?:tab(?:let)?|cap(?:sule)?|syrup|syr|inj(?:ection)?|'
     r'cream|oint(?:ment)?|drops?|susp(?:ension)?|gel|lotion|spray)'
 )
 
-# Medicine prefix pattern: "Tab " followed by medicine name
 MED_PREFIX_PATTERN = re.compile(
     DRUG_PREFIX + r'\.?\s+([A-Za-z][A-Za-z\-]{1,}(?:\s+[A-Za-z\-]+)?)',
     re.IGNORECASE
 )
 
-# Dosage: 500mg, 250 mg, 10ml, 0.5g, 5%, 100mcg, etc.
 DOSAGE_PATTERN = re.compile(
     r'\b(\d+(?:\.\d+)?)\s*(mg|ml|mcg|g|iu|%|units?)\b',
     re.IGNORECASE
 )
 
-# Frequency abbreviations: OD, BD, TDS, QID, PRN, etc.
 FREQ_ABBREV_PATTERN = re.compile(
     r'\b(OD|BD|BID|TDS|TID|QID|QD|PRN|SOS|HS|AC|PC|STAT)\b',
     re.IGNORECASE
 )
 
-# Frequency numeric: 1-0-1, 1+0+1, 0-0-1, etc.
-FREQ_NUMERIC_PATTERN = re.compile(
-    r'\b(\d[\-\+]\d[\-\+]\d)\b'
-)
+FREQ_NUMERIC_PATTERN = re.compile(r'\b(\d[\-\+]\d[\-\+]\d)\b')
 
-# Frequency text: "once daily", "twice a day", etc.
 FREQ_TEXT_PATTERN = re.compile(
     r'\b(once|twice|thrice|one\s+time|two\s+times?|three\s+times?|four\s+times?)'
     r'\s*(?:a\s+)?(?:daily|a\s+day|per\s+day)\b',
     re.IGNORECASE
 )
 
-# Full medicine line (relaxed): "Tab Paracetamol 500mg BD"
 FULL_LINE_PATTERN = re.compile(
     DRUG_PREFIX +
     r'\.?\s+'
-    r'([A-Za-z][A-Za-z\-]+(?:\s+[A-Za-z\-]+)?)'        # Medicine name
-    r'(?:\s+(\d+(?:\.\d+)?\s*(?:mg|ml|mcg|g|iu|%|units?)))?'  # Optional dosage
+    r'([A-Za-z][A-Za-z\-]+(?:\s+[A-Za-z\-]+)?)'
+    r'(?:\s+(\d+(?:\.\d+)?\s*(?:mg|ml|mcg|g|iu|%|units?)))?'
     r'(?:\s+(OD|BD|BID|TDS|TID|QID|QD|PRN|SOS|HS|STAT|'
     r'\d[\-\+]\d[\-\+]\d|'
-    r'once\s+daily|twice\s+daily|thrice\s+daily))?',     # Optional frequency
+    r'once\s+daily|twice\s+daily|thrice\s+daily))?',
     re.IGNORECASE
 )
 
-# Standalone medicine name pattern (no prefix required)
-# Matches capitalized words that look like drug names (4+ chars, starts with uppercase)
-STANDALONE_NAME_PATTERN = re.compile(
-    r'\b([A-Z][a-z]{3,}(?:\s+[A-Z][a-z]+)?)\b'
-)
+STANDALONE_NAME_PATTERN = re.compile(r'\b([A-Z][a-z]{3,}(?:\s+[A-Z][a-z]+)?)\b')
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -135,19 +130,17 @@ def normalize_frequency(raw_freq: str) -> str:
     cleaned = raw_freq.strip().lower()
     if cleaned in FREQUENCY_MAP:
         return FREQUENCY_MAP[cleaned]
-
     numeric_match = FREQ_NUMERIC_PATTERN.match(raw_freq)
     if numeric_match:
         pattern = numeric_match.group(1)
         parts = re.split(r'[\-\+]', pattern)
         total_doses = sum(int(p) for p in parts if p.isdigit())
         return f"{total_doses} times/day ({pattern})"
-
     return raw_freq
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Medicine Name Dictionary
+# Medicine Name Dictionary (fallback for Strategy 3)
 # ═══════════════════════════════════════════════════════════════════
 
 COMMON_MEDICINES = [
@@ -182,12 +175,10 @@ def correct_medicine_name(name: str) -> Optional[str]:
         return None
     name_lower = name.strip().lower()
 
-    # Exact match
     for med in COMMON_MEDICINES:
         if med.lower() == name_lower:
             return med
 
-    # Prefix match (3+ chars for noisy input)
     if len(name_lower) >= 3:
         for med in COMMON_MEDICINES:
             if med.lower().startswith(name_lower[:3]):
@@ -195,7 +186,6 @@ def correct_medicine_name(name: str) -> Optional[str]:
                 if sim >= 0.55:
                     return med
 
-    # Fuzzy match with relaxed threshold for noisy OCR
     best_match = None
     best_score = 0.0
     for med in COMMON_MEDICINES:
@@ -216,34 +206,30 @@ def _similarity(a: str, b: str) -> float:
     bigrams_a = set(a[i:i+2] for i in range(len(a) - 1))
     bigrams_b = set(b[i:i+2] for i in range(len(b) - 1))
     if not bigrams_a or not bigrams_b:
-        return 1.0 if a == b else 0.0
-    intersection = bigrams_a & bigrams_b
-    union = bigrams_a | bigrams_b
-    return len(intersection) / len(union)
+        return 0.0
+    return len(bigrams_a & bigrams_b) / len(bigrams_a | bigrams_b)
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Main Parsing — Line-by-Line Strategy
+# Public Entry Point
 # ═══════════════════════════════════════════════════════════════════
 
 def parse_lines(lines: list) -> List[MedicineEntry]:
     """
-    Parse grouped and cleaned text lines into structured medicine entries.
+    Parse a list of TextLine objects into structured medicine entries.
 
-    PRIMARY entry point (v3) — processes each line independently so
-    multiple medicines are preserved even from noisy OCR.
-
-    Strategy per line:
-        1. Try full-line regex (prefix + name + dosage + freq)
-        2. Fall back to individual component extraction
-        3. Fall back to standalone name matching + dictionary correction
-        4. Extract dosage/frequency from anywhere in the line
+    For each line:
+      0. DB-first lookup (no prefix required)
+      1. Full-line regex ("Tab Paracetamol 500mg BD")
+      2. Individual component regex
+      3. Standalone capitalized word + COMMON_MEDICINES check
+      4. Significant-word fallback when dosage/freq is present
 
     Args:
         lines: List of TextLine objects from cleaner.group_into_lines()
 
     Returns:
-        List of MedicineEntry objects (one per medicine found)
+        Deduplicated list of MedicineEntry objects.
     """
     if not lines:
         logger.warning("No lines to parse")
@@ -257,7 +243,6 @@ def parse_lines(lines: list) -> List[MedicineEntry]:
 
         logger.info(f"Parsing line: '{text}' (conf={confidence:.3f})")
 
-        # Try parsing this line
         entries = _parse_single_line(text, confidence)
 
         if entries:
@@ -265,19 +250,16 @@ def parse_lines(lines: list) -> List[MedicineEntry]:
                 e.raw_line = text
             all_medicines.extend(entries)
 
-    # Deduplicate
     all_medicines = _deduplicate(all_medicines)
-
-    logger.info(f"Parsing complete: {len(all_medicines)} medicine(s) from {len(lines)} lines")
+    logger.info(
+        f"Parsing complete: {len(all_medicines)} medicine(s) from {len(lines)} lines"
+    )
     return all_medicines
 
 
 def parse_filtered_results(filtered_detections: list,
                            filtered_text: str) -> List[MedicineEntry]:
-    """
-    LEGACY entry point — works with raw filtered detections.
-    For backward compatibility; new pipeline should use parse_lines().
-    """
+    """Legacy entry point — kept for backward compatibility."""
     if not filtered_text or len(filtered_text.strip()) < 3:
         return []
 
@@ -292,15 +274,70 @@ def parse_filtered_results(filtered_detections: list,
     return _deduplicate(medicines)
 
 
-def _parse_single_line(text: str, confidence: float) -> List[MedicineEntry]:
-    """Parse a single text line into medicine entries."""
-    medicines = []
+# ═══════════════════════════════════════════════════════════════════
+# Core Per-Line Parser
+# ═══════════════════════════════════════════════════════════════════
 
-    # ─── Strategy 1: Full-line pattern ─────────────────────────
+def _parse_single_line(text: str, confidence: float) -> List[MedicineEntry]:
+    """
+    Parse one text line using a cascade of strategies.
+    Returns on the first strategy that yields at least one entry.
+    """
+    medicines: List[MedicineEntry] = []
+
+    # Helper: extract dosage and frequency from anywhere in the line
+    def _dosage_and_freq():
+        dosage_matches = DOSAGE_PATTERN.findall(text)
+        dosages = [f"{v}{u}" for v, u in dosage_matches]
+        freq = (FREQ_ABBREV_PATTERN.findall(text) +
+                FREQ_NUMERIC_PATTERN.findall(text) +
+                FREQ_TEXT_PATTERN.findall(text))
+        return dosages, freq
+
+    # ─── Strategy 0: DB-first (no prefix required) ─────────────────
+    # Extract all significant single words and adjacent word pairs
+    # from the line and check each against the 195K medicine database.
+    # This works even when the doctor writes just "Metformin 500 BD"
+    # with no "Tab" prefix.
+    try:
+        from medicine_db import lookup_medicine, is_database_loaded
+        if is_database_loaded():
+            dosages, freq = _dosage_and_freq()
+            significant = _extract_significant_words(text)
+
+            # Build single-word + adjacent-bigram candidates
+            candidates = list(significant)
+            for i in range(len(significant) - 1):
+                candidates.append(f"{significant[i]} {significant[i+1]}")
+
+            for chunk in candidates:
+                if len(chunk) < 4:
+                    continue
+                match = lookup_medicine(chunk)
+                if match.matched_name and match.match_score >= 80:
+                    entry = MedicineEntry(
+                        medicine=match.matched_name,
+                        dosage=dosages[0] if dosages else None,
+                        frequency=normalize_frequency(freq[0]) if freq else None,
+                        confidence=confidence,
+                        corrected_name=match.matched_name,
+                    )
+                    medicines.append(entry)
+                    logger.info(
+                        f"  DB-first: '{chunk}' → '{match.matched_name}' "
+                        f"(score={match.match_score:.1f})"
+                    )
+    except ImportError:
+        logger.debug("medicine_db not available — skipping DB-first strategy")
+
+    if medicines:
+        return _deduplicate(medicines)
+
+    # ─── Strategy 1: Full-line pattern ─────────────────────────────
     for match in FULL_LINE_PATTERN.finditer(text):
-        name = match.group(1).strip() if match.group(1) else None
+        name   = match.group(1).strip() if match.group(1) else None
         dosage = match.group(2).strip() if match.group(2) else None
-        freq = match.group(3).strip() if match.group(3) else None
+        freq   = match.group(3).strip() if match.group(3) else None
 
         if name and len(name) >= 3:
             corrected = correct_medicine_name(name)
@@ -317,23 +354,17 @@ def _parse_single_line(text: str, confidence: float) -> List[MedicineEntry]:
     if medicines:
         return medicines
 
-    # ─── Strategy 2: Individual components ─────────────────────
+    # ─── Strategy 2: Individual components ─────────────────────────
+    dosages, freq = _dosage_and_freq()
     name_matches = MED_PREFIX_PATTERN.findall(text)
-    dosage_matches = DOSAGE_PATTERN.findall(text)
-    dosages = [f"{val}{unit}" for val, unit in dosage_matches]
-
-    freq_abbrevs = FREQ_ABBREV_PATTERN.findall(text)
-    freq_numerics = FREQ_NUMERIC_PATTERN.findall(text)
-    freq_texts = FREQ_TEXT_PATTERN.findall(text)
-    all_freqs = freq_abbrevs + freq_numerics + freq_texts
 
     if name_matches:
         for i, name in enumerate(name_matches):
             name = name.strip()
             if len(name) < 3:
                 continue
-            dosage = dosages[i] if i < len(dosages) else (dosages[0] if dosages else None)
-            freq_raw = all_freqs[i] if i < len(all_freqs) else (all_freqs[0] if all_freqs else None)
+            dosage  = dosages[i] if i < len(dosages) else (dosages[0] if dosages else None)
+            freq_raw = freq[i] if i < len(freq) else (freq[0] if freq else None)
 
             corrected = correct_medicine_name(name)
             entry = MedicineEntry(
@@ -345,24 +376,20 @@ def _parse_single_line(text: str, confidence: float) -> List[MedicineEntry]:
             )
             medicines.append(entry)
             logger.info(f"  Component match: {entry.to_dict()}")
-
         return medicines
 
-    # ─── Strategy 3: Standalone name + dictionary match ────────
-    # Look for capitalized words that match known medicines
-    standalone_names = STANDALONE_NAME_PATTERN.findall(text)
-    for name in standalone_names:
+    # ─── Strategy 3: Standalone name + dictionary ──────────────────
+    for name in STANDALONE_NAME_PATTERN.findall(text):
         name = name.strip()
         if len(name) < 4:
             continue
         corrected = correct_medicine_name(name)
         if corrected:
-            dosage = dosages[0] if dosages else None
-            freq_raw = all_freqs[0] if all_freqs else None
+            dosages2, freq2 = _dosage_and_freq()
             entry = MedicineEntry(
                 medicine=corrected,
-                dosage=dosage,
-                frequency=normalize_frequency(freq_raw) if freq_raw else None,
+                dosage=dosages2[0] if dosages2 else None,
+                frequency=normalize_frequency(freq2[0]) if freq2 else None,
                 confidence=confidence,
                 corrected_name=corrected,
             )
@@ -372,31 +399,54 @@ def _parse_single_line(text: str, confidence: float) -> List[MedicineEntry]:
     if medicines:
         return medicines
 
-    # ─── Strategy 4: Significant word fallback ─────────────────
-    if dosages or all_freqs:
-        significant = _extract_significant_words(text)
-        for word in significant[:2]:
+    # ─── Strategy 4: Significant word fallback ─────────────────────
+    dosages3, freq3 = _dosage_and_freq()
+    if dosages3 or freq3:
+        for word in _extract_significant_words(text)[:2]:
             corrected = correct_medicine_name(word)
             entry = MedicineEntry(
                 medicine=corrected if corrected else word,
-                dosage=dosages[0] if dosages else None,
-                frequency=normalize_frequency(all_freqs[0]) if all_freqs else None,
+                dosage=dosages3[0] if dosages3 else None,
+                frequency=normalize_frequency(freq3[0]) if freq3 else None,
                 confidence=confidence,
                 corrected_name=corrected,
             )
             medicines.append(entry)
-            logger.info(f"  Significant-word match: {entry.to_dict()}")
+            logger.info(f"  Significant-word fallback: {entry.to_dict()}")
 
     return medicines
 
 
+# ═══════════════════════════════════════════════════════════════════
+# Helpers
+# ═══════════════════════════════════════════════════════════════════
+
+def _extract_significant_words(text: str) -> List[str]:
+    """
+    Extract words that could plausibly be medicine names.
+    Removes stop words, form prefixes, frequency terms, and short tokens.
+    """
+    STOP_WORDS = {
+        "tablet", "capsule", "syrup", "cream", "gel", "lotion", "spray",
+        "injection", "drop", "suspension", "ointment", "dose", "take",
+        "after", "before", "food", "meals", "daily", "times", "days",
+        "morning", "night", "evening", "every", "hours", "with", "water",
+        "doctor", "patient", "date", "name", "prescription", "medicine",
+        "drug", "pharmacy", "the", "and", "for", "from", "this", "that",
+        "per", "day", "oral", "route", "qty", "quantity", "refill",
+        "tab", "cap", "syr", "inj",
+    }
+    words = re.findall(r'\b[A-Za-z][A-Za-z\-]{2,}\b', text)
+    return [w for w in words if w.lower() not in STOP_WORDS and len(w) >= 4]
+
+
 def _parse_text_legacy(text: str, confidence_map: dict) -> List[MedicineEntry]:
-    """Legacy text parsing (for backward compat)."""
+    """Legacy text parsing — kept for backward compatibility."""
     medicines = []
     for match in FULL_LINE_PATTERN.finditer(text):
-        name = match.group(1).strip() if match.group(1) else None
+        name   = match.group(1).strip() if match.group(1) else None
         dosage = match.group(2).strip() if match.group(2) else None
-        freq = match.group(3).strip() if match.group(3) else None
+        freq   = match.group(3).strip() if match.group(3) else None
         if name:
             corrected = correct_medicine_name(name)
             entry = MedicineEntry(
@@ -411,8 +461,9 @@ def _parse_text_legacy(text: str, confidence_map: dict) -> List[MedicineEntry]:
     if not medicines:
         name_matches = MED_PREFIX_PATTERN.findall(text)
         dosage_matches = DOSAGE_PATTERN.findall(text)
-        dosages = [f"{val}{unit}" for val, unit in dosage_matches]
-        freq_all = FREQ_ABBREV_PATTERN.findall(text) + FREQ_NUMERIC_PATTERN.findall(text)
+        dosages = [f"{v}{u}" for v, u in dosage_matches]
+        freq_all = (FREQ_ABBREV_PATTERN.findall(text) +
+                    FREQ_NUMERIC_PATTERN.findall(text))
 
         for i, name in enumerate(name_matches):
             name = name.strip()
@@ -429,26 +480,10 @@ def _parse_text_legacy(text: str, confidence_map: dict) -> List[MedicineEntry]:
     return medicines
 
 
-def _extract_significant_words(text: str) -> List[str]:
-    """Extract significant words that could be medicine names."""
-    STOP_WORDS = {
-        "tablet", "capsule", "syrup", "cream", "gel", "lotion", "spray",
-        "injection", "drop", "suspension", "ointment", "dose", "take",
-        "after", "before", "food", "meals", "daily", "times", "days",
-        "morning", "night", "evening", "every", "hours", "with", "water",
-        "doctor", "patient", "date", "name", "prescription", "medicine",
-        "drug", "pharmacy", "the", "and", "for", "from", "this", "that",
-        "per", "day", "oral", "route", "qty", "quantity", "refill",
-        "tab", "cap", "syr", "inj",
-    }
-    words = re.findall(r'\b[A-Za-z][A-Za-z\-]{2,}\b', text)
-    return [w for w in words if w.lower() not in STOP_WORDS and len(w) >= 4]
-
-
 def _deduplicate(medicines: List[MedicineEntry]) -> List[MedicineEntry]:
     """Remove duplicate medicine entries (same name, case-insensitive)."""
-    seen = set()
-    unique = []
+    seen: set = set()
+    unique: List[MedicineEntry] = []
     for m in medicines:
         key = m.medicine.lower()
         if key not in seen:
