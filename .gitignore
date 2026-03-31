@@ -69,6 +69,9 @@ dataset/
 medicine_data.csv
 *.csv
 
+__pycache__/
+*.pyc
+
 # =========================
 # Sample / Test Images
 # =========================
