@@ -307,19 +307,44 @@ const DashboardScreen = ({ navigation }) => {
     return set;
   }, [todayISO]);
 
-  // Filter schedules
+  // Helper: check if a schedule is active on a given date
+  const isScheduleOnDate = useCallback((schedule, date) => {
+    const dayAbbr = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    const dayOfWeek = dayAbbr[date.getDay()];
+    const freq = (schedule.frequencyType || '').toUpperCase();
+
+    // AS_NEEDED is always visible
+    if (freq === 'AS_NEEDED') return true;
+    // DAILY is every day
+    if (freq === 'DAILY' || freq === 'TWICE_DAILY' || freq === 'THREE_TIMES_DAILY') return true;
+    // SPECIFIC_DAYS / CUSTOM — check customDays (comma-separated string: "MON,WED,FRI")
+    if (freq === 'SPECIFIC_DAYS' || freq === 'CUSTOM') {
+      const raw = schedule.customDays || '';
+      // Handle both string ("MON,WED,FRI") and array (["MON","WED","FRI"]) formats
+      const customDays = Array.isArray(raw) ? raw : raw.split(',');
+      return customDays.map(d => d.trim().toUpperCase()).includes(dayOfWeek);
+    }
+    // Default: show on all days
+    return true;
+  }, []);
+
+  // Filter schedules by selected date + active filter
   const filteredSchedules = useMemo(() => {
     let list = Array.isArray(schedules) ? schedules : [];
+
+    // Filter by selected day-of-week
+    list = list.filter(s => isScheduleOnDate(s, selectedDate));
+
+    // Apply status filter
     if (activeFilter === 'pending') {
       list = list.filter(s => !loggedSchedules.has(s.id));
     } else if (activeFilter === 'taken') {
       list = list.filter(s => loggedSchedules.has(s.id) && !snoozedSchedules.has(s.id));
     } else if (activeFilter === 'missed') {
-      // We show missed by looking at logged + status
       list = list.filter(s => loggedSchedules.has(s.id));
     }
     return list;
-  }, [schedules, activeFilter, loggedSchedules, snoozedSchedules]);
+  }, [schedules, activeFilter, loggedSchedules, snoozedSchedules, selectedDate, isScheduleOnDate]);
 
   // ─── Loading State ─────────────────────────────────────────────
   if (loading) {
@@ -360,7 +385,7 @@ const DashboardScreen = ({ navigation }) => {
     <SafeAreaView style={styles.container}>
       <ScrollView
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
-        contentContainerStyle={{ paddingBottom: 100 }}
+        contentContainerStyle={{ paddingBottom: 120 }}
         showsVerticalScrollIndicator={false}
       >
         {/* ── Header ──────────────────────────────────────────── */}
@@ -378,9 +403,9 @@ const DashboardScreen = ({ navigation }) => {
           </View>
           <TouchableOpacity
             style={styles.headerAction}
-            onPress={() => navigation.navigate('AddMedicine')}
+            onPress={() => navigation.navigate('Report')}
           >
-            <MaterialCommunityIcons name="plus" size={22} color={colors.primary} />
+            <MaterialCommunityIcons name="bell-outline" size={22} color={colors.primary} />
             {pendingCount > 0 && (
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>{pendingCount > 9 ? '9+' : pendingCount}</Text>
@@ -409,7 +434,7 @@ const DashboardScreen = ({ navigation }) => {
           <View style={styles.chartCard}>
             <Text style={styles.chartLabel}>Today</Text>
             <CircularProgress
-              size={110}
+              size={100}
               strokeWidth={10}
               segments={[
                 { value: stats?.takenCount || 0, color: colors.taken },
@@ -419,18 +444,20 @@ const DashboardScreen = ({ navigation }) => {
               label={`${todayTaken}/${todayTotal || schedules.length}`}
               sublabel="doses"
             />
-            <View style={styles.chartStatsRow}>
-              <View style={styles.miniStat}>
-                <View style={[styles.miniDot, { backgroundColor: colors.taken }]} />
-                <Text style={styles.miniStatText}>{stats?.takenCount || 0}</Text>
-              </View>
-              <View style={styles.miniStat}>
-                <View style={[styles.miniDot, { backgroundColor: colors.missed }]} />
-                <Text style={styles.miniStatText}>{stats?.missedCount || 0}</Text>
-              </View>
-              <View style={styles.miniStat}>
-                <View style={[styles.miniDot, { backgroundColor: colors.snoozed }]} />
-                <Text style={styles.miniStatText}>{stats?.snoozedCount || 0}</Text>
+            <View style={styles.chartBottom}>
+              <View style={styles.chartStatsRow}>
+                <View style={styles.miniStat}>
+                  <View style={[styles.miniDot, { backgroundColor: colors.taken }]} />
+                  <Text style={styles.miniStatText}>{stats?.takenCount || 0}</Text>
+                </View>
+                <View style={styles.miniStat}>
+                  <View style={[styles.miniDot, { backgroundColor: colors.missed }]} />
+                  <Text style={styles.miniStatText}>{stats?.missedCount || 0}</Text>
+                </View>
+                <View style={styles.miniStat}>
+                  <View style={[styles.miniDot, { backgroundColor: colors.snoozed }]} />
+                  <Text style={styles.miniStatText}>{stats?.snoozedCount || 0}</Text>
+                </View>
               </View>
             </View>
           </View>
@@ -446,15 +473,17 @@ const DashboardScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
             <CircularProgress
-              size={110}
+              size={100}
               strokeWidth={10}
               progress={currentPeriodStats.progress}
               label={`${Math.round(currentPeriodStats.progress * 100)}%`}
               sublabel="adherence"
             />
-            <Text style={styles.periodDetail}>
-              {currentPeriodStats.taken}/{currentPeriodStats.total} doses
-            </Text>
+            <View style={styles.chartBottom}>
+              <Text style={styles.periodDetail}>
+                {currentPeriodStats.taken}/{currentPeriodStats.total} doses
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -502,6 +531,13 @@ const DashboardScreen = ({ navigation }) => {
           </Text>
           <Text style={styles.scheduleCount}>{filteredSchedules.length} items</Text>
         </View>
+
+        {!isToday && (
+          <View style={styles.pastDateBanner}>
+            <MaterialCommunityIcons name="information-outline" size={14} color={colors.info} />
+            <Text style={styles.pastDateText}>Viewing past schedule — actions disabled</Text>
+          </View>
+        )}
 
         {/* ── Schedule List ────────────────────────────────────── */}
         {filteredSchedules.length === 0 ? (
@@ -572,6 +608,7 @@ const DashboardScreen = ({ navigation }) => {
                       onPress={() => navigation.navigate('MedicineDetail', { schedule: item })}
                       loggedToday={loggedSchedules.has(item.id)}
                       snoozedToday={snoozedSchedules.has(item.id)}
+                      readOnly={!isToday}
                     />
                   ))}
                 </View>
@@ -590,13 +627,14 @@ const DashboardScreen = ({ navigation }) => {
                 onPress={() => navigation.navigate('MedicineDetail', { schedule: item })}
                 loggedToday={loggedSchedules.has(item.id)}
                 snoozedToday={snoozedSchedules.has(item.id)}
+                readOnly={!isToday}
               />
             ))}
           </View>
         )}
       </ScrollView>
-
-      {/* FAB — Add Medicine */}
+      
+    {/* FAB — Add Medicine */}
       {schedules.length > 0 && (
         <TouchableOpacity
           style={styles.fab}
@@ -678,8 +716,9 @@ const styles = StyleSheet.create({
   },
   chartCard: {
     flex: 1, backgroundColor: colors.surface, borderRadius: radii.xl,
-    paddingVertical: spacing.lg, alignItems: 'center',
-    minHeight: 200,
+    paddingVertical: spacing.md, paddingHorizontal: spacing.xs,
+    alignItems: 'center', justifyContent: 'space-between',
+    minHeight: 210,
     ...shadows.sm,
   },
   chartLabel: {
@@ -687,6 +726,9 @@ const styles = StyleSheet.create({
   },
   chartStatsRow: {
     flexDirection: 'row', gap: spacing.md, marginTop: spacing.sm,
+  },
+  chartBottom: {
+    height: 28, alignItems: 'center', justifyContent: 'center',
   },
   miniStat: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
@@ -762,6 +804,15 @@ const styles = StyleSheet.create({
   },
   emptyText: { ...typography.bodySemiBold, color: colors.textSecondary, marginBottom: spacing.xs },
   emptySubtext: { ...typography.caption, textAlign: 'center' },
+
+  // Past date banner
+  pastDateBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: colors.infoBg, marginHorizontal: spacing.lg, marginBottom: spacing.md,
+    paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.sm,
+    borderLeftWidth: 3, borderLeftColor: colors.info,
+  },
+  pastDateText: { fontSize: 12, fontFamily: fonts.semiBold, color: colors.info },
 
   // List
   listContainer: { paddingHorizontal: spacing.lg },

@@ -68,6 +68,23 @@ public class MedicineController {
         List<DrugLookup> results = drugLookupRepository
                 .findTop20ByNameContainingIgnoreCaseOrSaltNameContainingIgnoreCase(query, query);
 
+        // Sort: salt name matches first (generic names), then brand matches
+        String q = query.toLowerCase();
+        results.sort((a, b) -> {
+            boolean aSalt = a.getSaltName() != null && a.getSaltName().toLowerCase().contains(q);
+            boolean bSalt = b.getSaltName() != null && b.getSaltName().toLowerCase().contains(q);
+            if (aSalt && !bSalt) return -1;
+            if (!aSalt && bSalt) return 1;
+            // Within salt matches, prefer shorter names (more generic)
+            if (aSalt && bSalt) {
+                return Integer.compare(
+                    a.getSaltName().length(),
+                    b.getSaltName().length()
+                );
+            }
+            return 0;
+        });
+
         List<Map<String, Object>> response = new ArrayList<>();
         for (DrugLookup dl : results) {
             response.add(buildDrugInfoResponse(dl));

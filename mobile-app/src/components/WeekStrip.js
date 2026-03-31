@@ -46,7 +46,7 @@ const WeekStrip = ({ selectedDate, onSelectDate, markedDates = new Set() }) => {
         contentContainerStyle={styles.scrollContent}
       >
         {days.map((day, idx) => {
-          const iso = day.toISOString().split('T')[0];
+          const iso = toLocalISO(day);
           const isSelected = iso === selectedISO;
           const isToday = iso === todayISO;
           const hasSchedules = markedDates.has(iso);

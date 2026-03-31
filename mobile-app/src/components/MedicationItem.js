@@ -58,7 +58,7 @@ const getTimeStatus = (scheduleTimes, frequencyType) => {
   return { isActive: false, statusText: 'All doses done', isOverdue: false };
 };
 
-const MedicationItem = ({ schedule, onTaken, onMissed, onSnooze, onPress, onUndo, loggedToday, snoozedToday }) => {
+const MedicationItem = ({ schedule, onTaken, onMissed, onSnooze, onPress, onUndo, loggedToday, snoozedToday, readOnly }) => {
   const medicine = schedule?.medicine || {};
   const scheduleTimes = schedule?.scheduleTimes || [];
   const frequencyType = schedule?.frequencyType;
@@ -157,7 +157,12 @@ const MedicationItem = ({ schedule, onTaken, onMissed, onSnooze, onPress, onUndo
 
       {/* Bottom: Action buttons */}
       <View style={styles.actionRow}>
-        {loggedToday || snoozedToday ? (
+        {readOnly ? (
+          <View style={styles.doneIndicator}>
+            <MaterialCommunityIcons name="eye-outline" size={14} color={colors.textTertiary} />
+            <Text style={[styles.doneLabel, { color: colors.textTertiary }]}>View only</Text>
+          </View>
+        ) : loggedToday || snoozedToday ? (
           <>
             <View style={styles.doneIndicator}>
               <MaterialCommunityIcons

@@ -73,6 +73,7 @@ const HomeStack = () => (
     <Stack.Screen name="ScanPrescription" component={ScanPrescriptionScreen} options={{ title: 'Scan Prescription' }} />
     <Stack.Screen name="MedicineDetail" component={MedicineDetailScreen} options={({ route }) => ({ title: route.params?.schedule?.medicine?.name || 'Medicine' })} />
     <Stack.Screen name="EditSchedule" component={EditScheduleScreen} options={({ route }) => ({ title: `Edit: ${route.params?.schedule?.medicine?.name || 'Schedule'}` })} />
+    <Stack.Screen name="Report" component={ReportScreen} options={{ title: 'Adherence Report' }} />
   </Stack.Navigator>
 );
 

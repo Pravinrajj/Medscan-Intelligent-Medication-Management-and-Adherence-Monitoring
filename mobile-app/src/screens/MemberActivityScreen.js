@@ -205,7 +205,7 @@ const MemberActivityScreen = ({ route, navigation }) => {
         data={activity}
         renderItem={renderItem}
         keyExtractor={(item, idx) => item.id || String(idx)}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 20 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListEmptyComponent={
           <View style={styles.emptyBox}>

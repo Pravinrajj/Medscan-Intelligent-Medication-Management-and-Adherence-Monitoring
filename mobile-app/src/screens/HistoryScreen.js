@@ -307,7 +307,7 @@ const HistoryScreen = ({ navigation }) => {
                 </View>
               )}
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
-              contentContainerStyle={{ paddingBottom: 100 }}
+              contentContainerStyle={{ paddingBottom: 120 }}
               showsVerticalScrollIndicator={false}
             />
           )}

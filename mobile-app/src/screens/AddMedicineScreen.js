@@ -13,7 +13,7 @@ import { scheduleMedicationReminder } from '../services/NotificationService';
 import { colors, fonts, spacing, radii, shadows, typography, components } from '../theme';
 
 // ─── Constants ───────────────────────────────────────────────────
-const DOSAGE_UNITS = ['mg', 'ml', 'IU', 'mcg', 'g', 'drops', 'puffs'];
+const DOSAGE_UNITS = ['mg', 'ml', 'drops', 'g'];
 
 const MEDICINE_TYPES = [
   { key: 'TABLET', label: 'Tablet', icon: 'pill' },
@@ -22,7 +22,6 @@ const MEDICINE_TYPES = [
   { key: 'INJECTION', label: 'Injection', icon: 'needle' },
   { key: 'DROPS', label: 'Drops', icon: 'eyedropper' },
   { key: 'INHALER', label: 'Inhaler', icon: 'lungs' },
-  { key: 'CREAM', label: 'Cream', icon: 'lotion-outline' },
   { key: 'OTHER', label: 'Other', icon: 'dots-horizontal' },
 ];
 
@@ -42,15 +41,47 @@ const DAYS_OF_WEEK = [
 
 const TYPE_COLOR = (key) => colors.medicineTypes[key?.toLowerCase()] || colors.textTertiary;
 
-// Strip manufacturer/corporation names from drug names
-const cleanDrugName = (name) => {
+// Extract generic/active ingredient from brand name
+// e.g., "Stayhappi Paracetamol 500mg Tablet" → "Paracetamol"
+// e.g., "Cipla Azithromycin 250mg Capsule" → "Azithromycin"
+const cleanDrugName = (name, saltName) => {
   if (!name) return '';
-  // Remove common suffixes like "by XYZ Ltd", "- XYZ Corp", "(XYZ Pharma)"
-  return name
-    .replace(/\s*[\(\[].*?[\)\]]\s*$/g, '')  // Remove trailing (parenthetical)
+  
+  // If saltName available, extract just the drug name from it (strip dosage)
+  if (saltName) {
+    return saltName
+      .replace(/\s*\(.*?\)\s*/g, '')  // Remove (500mg), (40IU) etc
+      .replace(/\s*\d+\s*(mg|ml|mcg|IU|g)\s*/gi, '') // Remove standalone dosage
+      .trim();
+  }
+  
+  let cleaned = name;
+  
+  // Remove trailing form types: Tablet, Capsule, Syrup, Injection, Suspension, Solution, Ointment, etc.
+  cleaned = cleaned.replace(/\s+(Tablet|Capsule|Syrup|Suspension|Injection|Solution|Ointment|Cream|Gel|Drops|Inhaler|Powder|Spray|Lotion|Strip|Bottle|Vial)s?\b.*$/i, '');
+  
+  // Remove dosage patterns: 500mg, 250mg/5ml, 40IU/ml, etc.
+  cleaned = cleaned.replace(/\s*\d+(\.\d+)?\s*(mg|ml|mcg|IU|g)(\/\d*(mg|ml))?\s*/gi, ' ');
+  
+  // Remove trailing parenthetical
+  cleaned = cleaned.replace(/\s*[\(\[].*?[\)\]]\s*$/g, '');
+  
+  // Remove common manufacturer patterns
+  cleaned = cleaned
     .replace(/\s*[-–]\s*(by\s)?[\w\s]*(Ltd|Corp|Inc|Pharma|Labs|Healthcare|Pvt|Limited|Laboratories).*$/i, '')
-    .replace(/\s*by\s+[\w\s]*(Ltd|Corp|Inc|Pharma|Labs|Healthcare|Pvt|Limited|Laboratories).*$/i, '')
-    .trim();
+    .replace(/\s*by\s+[\w\s]*(Ltd|Corp|Inc|Pharma|Labs|Healthcare|Pvt|Limited|Laboratories).*$/i, '');
+  
+  return cleaned.replace(/\s+/g, ' ').trim();
+};
+
+// Get the best display name for a drug result — prefers saltName (generic), cleaned from dosage info
+const getBestDrugName = (item) => {
+  // If saltName exists, use cleaned version of it (it's the generic name)
+  if (item.saltName) {
+    return cleanDrugName(item.saltName, item.saltName);
+  }
+  // Otherwise clean the brand name
+  return cleanDrugName(item.name || item.medicineName);
 };
 
 const AddMedicineScreen = ({ navigation, route }) => {
@@ -124,7 +155,8 @@ const AddMedicineScreen = ({ navigation, route }) => {
           const res = await api.get(`/medicines/drug-search?query=${encodeURIComponent(name)}`);
           const seen = new Set();
           const deduped = (res.data || []).filter(item => {
-            const key = (item.name || '').toLowerCase().trim();
+            // Deduplicate by generic name
+            const key = getBestDrugName(item).toLowerCase();
             if (seen.has(key)) return false;
             seen.add(key);
             return true;
@@ -137,7 +169,7 @@ const AddMedicineScreen = ({ navigation, route }) => {
             const res = await api.get(`/medicines/search?query=${encodeURIComponent(name)}`);
             const seen = new Set();
             const deduped = (res.data || []).filter(item => {
-              const key = (item.name || item.medicineName || '').toLowerCase().trim();
+              const key = getBestDrugName(item).toLowerCase();
               if (seen.has(key)) return false;
               seen.add(key);
               return true;
@@ -153,7 +185,9 @@ const AddMedicineScreen = ({ navigation, route }) => {
 
   const selectSuggestion = (item) => {
     skipSearchRef.current = true;
-    setName(item.name || item.medicineName || '');
+    // Use the generic/salt name as the medicine name, not the brand
+    const genericName = getBestDrugName(item);
+    setName(genericName);
     setSearchResults([]);
     setShowSuggestions(false);
 
@@ -230,7 +264,8 @@ const AddMedicineScreen = ({ navigation, route }) => {
       const medRes = await api.post('/medicines', { name: name.trim(), type });
       const medicineId = medRes.data.id;
 
-      const today = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       const payload = {
         startDate: today,
         doseAmount: parseFloat(doseAmount) || 1,
@@ -326,14 +361,24 @@ const AddMedicineScreen = ({ navigation, route }) => {
                 {showSuggestions && searchResults.length > 0 && (
                   <View style={styles.dropdown}>
                     <ScrollView style={{ maxHeight: 200 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
-                      {searchResults.map((item, idx) => (
-                        <TouchableOpacity key={idx} style={styles.dropdownItem} onPress={() => selectSuggestion(item)}>
-                          <Text style={styles.dropdownName} numberOfLines={1}>
-                            {cleanDrugName(item.name || item.medicineName)}
-                          </Text>
-                          {item.saltName && <Text style={styles.dropdownSub} numberOfLines={1}>{item.saltName}</Text>}
-                        </TouchableOpacity>
-                      ))}
+                      {searchResults.map((item, idx) => {
+                        const genericName = getBestDrugName(item);
+                        const brandName = cleanDrugName(item.name || item.medicineName);
+                        const showBrand = brandName.toLowerCase() !== genericName.toLowerCase();
+                        return (
+                          <TouchableOpacity key={idx} style={styles.dropdownItem} onPress={() => selectSuggestion(item)}>
+                            <Text style={styles.dropdownName} numberOfLines={1}>
+                              {genericName}
+                            </Text>
+                            {showBrand && (
+                              <Text style={styles.dropdownMfg} numberOfLines={1}>Brand: {brandName}</Text>
+                            )}
+                            {item.therapeuticClass && (
+                              <Text style={styles.dropdownSub} numberOfLines={1}>{item.therapeuticClass}</Text>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
                     </ScrollView>
                   </View>
                 )}
@@ -754,7 +799,7 @@ const styles = StyleSheet.create({
   // Bottom bar
   bottomBar: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: spacing.xl, paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.md + 80,
     backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.borderLight,
     ...shadows.md,
   },

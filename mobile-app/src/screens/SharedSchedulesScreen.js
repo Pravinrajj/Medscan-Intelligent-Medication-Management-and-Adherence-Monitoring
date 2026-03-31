@@ -369,7 +369,7 @@ const SharedSchedulesScreen = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  listContent: { padding: spacing.lg, paddingBottom: spacing.lg },
+  listContent: { padding: spacing.lg, paddingBottom: 120 },
 
   listHeader: { marginBottom: spacing.lg },
   listHeaderTitle: { fontSize: 18, fontFamily: fonts.bold, color: colors.text },
@@ -403,7 +403,7 @@ const styles = StyleSheet.create({
   sharedByRow: { marginTop: spacing.sm + 2, paddingTop: spacing.sm + 2, borderTopWidth: 1, borderTopColor: colors.borderLight },
   sharedByText: { fontSize: 12, fontFamily: fonts.regular, color: colors.textTertiary },
 
-  bottomBar: { padding: spacing.lg, paddingBottom: spacing.md, marginBottom: 60 },
+  bottomBar: { padding: spacing.lg, paddingBottom: spacing.md, marginBottom: 100 },
   shareBtn: {
     backgroundColor: colors.primary, paddingVertical: spacing.md, borderRadius: radii.lg,
     alignItems: 'center', ...shadows.colored(colors.primary),

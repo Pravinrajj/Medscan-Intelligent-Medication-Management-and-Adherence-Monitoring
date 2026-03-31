@@ -105,17 +105,22 @@ const GroupChatScreen = ({ route, navigation }) => {
 
   const stripNameFromMessage = (message, userId) => {
     if (!message) return '';
+    let cleaned = message;
     const backendName = memberNameMap[userId];
-    if (backendName && message.startsWith(backendName + ' ')) {
-      return message.substring(backendName.length + 1);
+    if (backendName && cleaned.startsWith(backendName + ' ')) {
+      cleaned = cleaned.substring(backendName.length + 1);
     }
     if (group?.admin?.id === userId) {
       const names = [group.admin.fullName, group.admin.username].filter(Boolean);
       for (const n of names) {
-        if (message.startsWith(n + ' ')) return message.substring(n.length + 1);
+        if (cleaned.startsWith(n + ' ')) {
+          cleaned = cleaned.substring(n.length + 1);
+          break;
+        }
       }
     }
-    return message;
+    // If stripping made it empty, return original message
+    return cleaned.trim() || message;
   };
 
   const getNameColor = (userId) => NAME_COLORS[(userId || 0) % NAME_COLORS.length];
@@ -187,7 +192,7 @@ const GroupChatScreen = ({ route, navigation }) => {
     const showDateSep = currentDate !== prevDate;
 
     const prevPerformer = prevItem ? (prevItem.performedByUserId || prevItem.userId) : null;
-    const showNameLabel = !isMe && performerId !== prevPerformer;
+    const showNameLabel = performerId !== prevPerformer || showDateSep;
 
     if (isSystem) {
       return (
@@ -226,9 +231,9 @@ const GroupChatScreen = ({ route, navigation }) => {
           )}
 
           <View style={[styles.bubble, isMe ? styles.bubbleSelf : styles.bubbleOther]}>
-            {isMe ? (
+            {isMe && showNameLabel ? (
               <Text style={[styles.bubbleName, { color: colors.primary }]}>You</Text>
-            ) : showNameLabel ? (
+            ) : !isMe && showNameLabel ? (
               <Text style={[styles.bubbleName, { color: nameColor }]}>{displayName}</Text>
             ) : null}
 
@@ -236,7 +241,7 @@ const GroupChatScreen = ({ route, navigation }) => {
               <View style={[styles.eventDot, { backgroundColor: ev.accent }]}>
                 <MaterialCommunityIcons name={ev.icon} size={10} color={colors.textInverse} />
               </View>
-              <Text style={styles.bubbleMessage} numberOfLines={3}>{cleanMessage || item.message}</Text>
+              <Text style={styles.bubbleMessage}>{cleanMessage || item.message || item.activityType}</Text>
             </View>
 
             <Text style={styles.bubbleTime}>{getTimeLabel(item.timestamp)}</Text>
@@ -379,12 +384,12 @@ const styles = StyleSheet.create({
 
   bubbleName: { fontSize: 11, fontFamily: fonts.bold, marginBottom: 1 },
 
-  messageRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  messageRow: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 60 },
   eventDot: {
-    width: 16, height: 16, borderRadius: 8,
+    width: 18, height: 18, borderRadius: 9,
     alignItems: 'center', justifyContent: 'center',
   },
-  bubbleMessage: { fontSize: 13, fontFamily: fonts.regular, color: colors.text, lineHeight: 18, flex: 1 },
+  bubbleMessage: { fontSize: 13, fontFamily: fonts.regular, color: colors.text, lineHeight: 18, flexShrink: 1 },
   bubbleTime: {
     fontSize: 9, fontFamily: fonts.regular, color: colors.textTertiary, marginTop: 2, textAlign: 'right',
   },
