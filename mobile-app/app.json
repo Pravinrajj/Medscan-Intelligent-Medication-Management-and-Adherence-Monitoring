@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "mobile-app",
+    "name": "MedScan",
     "slug": "mobile-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0891B2"
     },
     "ios": {
       "supportsTablet": true
@@ -18,15 +18,40 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#0891B2"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.medscan.app",
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "android.permission.READ_CONTACTS",
+        "android.permission.WRITE_CONTACTS"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "@react-native-community/datetimepicker"
-    ]
+      "@react-native-community/datetimepicker",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#0891B2"
+        }
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Allow MedScan to access your contacts to find friends and family on MedScan."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "567e7bb9-3f2a-4b8a-b9a1-777eac1ae7ff"
+      }
+    },
+    "owner": "pravinrajj"
   }
 }

@@ -23,6 +23,7 @@ public class StatsService {
         int taken = 0;
         int missed = 0;
         int skipped = 0;
+        int snoozed = 0;
 
         for (AdherenceLog log : logs) {
             String status = log.getStatus();
@@ -30,10 +31,11 @@ public class StatsService {
                 if (status.equalsIgnoreCase("TAKEN")) taken++;
                 else if (status.equalsIgnoreCase("MISSED")) missed++;
                 else if (status.equalsIgnoreCase("SKIPPED")) skipped++;
+                else if (status.equalsIgnoreCase("SNOOZED")) snoozed++;
             }
         }
 
-        int total = taken + missed + skipped;
+        int total = taken + missed + skipped + snoozed;
         double rate = total > 0 ? (double) taken / total * 100 : 0;
 
         Map<String, Object> stats = new HashMap<>();
@@ -41,6 +43,20 @@ public class StatsService {
         stats.put("takenCount", taken);
         stats.put("missedCount", missed);
         stats.put("skippedCount", skipped);
+        stats.put("snoozedCount", snoozed);
+
+        // Today's logs for per-schedule tracking in frontend
+        LocalDateTime todayStart = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0);
+        List<Map<String, Object>> todayLogs = new java.util.ArrayList<>();
+        for (AdherenceLog log : logs) {
+            if (log.getTimestamp() != null && !log.getTimestamp().isBefore(todayStart)) {
+                Map<String, Object> entry = new HashMap<>();
+                entry.put("scheduleId", log.getScheduleId());
+                entry.put("status", log.getStatus());
+                todayLogs.add(entry);
+            }
+        }
+        stats.put("todayLogs", todayLogs);
         stats.put("totalLogs", total);
 
         // Daily breakdown for chart (last 7 days)

@@ -1,20 +1,31 @@
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, ActivityIndicator, Switch } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../api/client';
-import { AuthContext } from '../context/AuthContext';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { colors, fonts, spacing, radii, shadows, typography } from '../theme';
+import { scheduleMedicationReminder, cancelAllReminders } from '../services/NotificationService';
+import { AuthContext } from '../context/AuthContext';
 
 const TYPE_UNITS = {
-  TABLET: { options: ['Tablet(s)', 'Capsule(s)'], default: 'Tablet(s)' },
-  SYRUP: { options: ['mL', 'Teaspoon(s)', 'Tablespoon(s)'], default: 'mL' },
-  INJECTION: { options: ['mL', 'Unit(s)', 'IU'], default: 'mL' },
-  DROPS: { options: ['Drop(s)'], default: 'Drop(s)' },
-  CREAM: { options: ['Application(s)', 'g', 'cm'], default: 'Application(s)' },
-  INHALER: { options: ['Puff(s)'], default: 'Puff(s)' },
-  PATCH: { options: ['Patch(es)'], default: 'Patch(es)' },
-  OTHER: { options: ['Dose(s)', 'Unit(s)', 'Tablet(s)', 'mL'], default: 'Dose(s)' },
+  TABLET: { options: ['Tablet(s)', 'Capsule(s)'], default: 'Tablet(s)', icon: 'pill' },
+  SYRUP: { options: ['mL', 'Teaspoon(s)', 'Tablespoon(s)'], default: 'mL', icon: 'bottle-tonic' },
+  INJECTION: { options: ['mL', 'Unit(s)', 'IU'], default: 'mL', icon: 'needle' },
+  OTHER: { options: ['Dose(s)', 'Unit(s)', 'Tablet(s)', 'mL', 'Puff(s)', 'Drop(s)'], default: 'Dose(s)', icon: 'help-circle' },
 };
+
+const TYPES = Object.keys(TYPE_UNITS);
+
+const DAYS_OF_WEEK = [
+  { key: 'SUN', label: 'S' },
+  { key: 'MON', label: 'M' },
+  { key: 'TUE', label: 'T' },
+  { key: 'WED', label: 'W' },
+  { key: 'THU', label: 'T' },
+  { key: 'FRI', label: 'F' },
+  { key: 'SAT', label: 'S' },
+];
 
 const EditScheduleScreen = ({ navigation, route }) => {
   const schedule = route.params?.schedule || {};
@@ -23,6 +34,11 @@ const EditScheduleScreen = ({ navigation, route }) => {
   const [doseAmount, setDoseAmount] = useState(String(schedule.doseAmount || '1'));
   const [doseUnit, setDoseUnit] = useState(schedule.doseUnit || TYPE_UNITS[medicine.type?.toUpperCase()]?.default || 'Tablet(s)');
   const [currentStock, setCurrentStock] = useState(schedule.currentStock != null ? String(schedule.currentStock) : '');
+  const [frequencyType, setFrequencyType] = useState(schedule.frequencyType || 'DAILY');
+  const [customDays, setCustomDays] = useState(() => {
+    if (schedule.customDays) return schedule.customDays.split(',');
+    return [];
+  });
   const [notificationsOn, setNotificationsOn] = useState(true);
   const [times, setTimes] = useState(() => {
     if (schedule.scheduleTimes?.length > 0) {
@@ -41,6 +57,7 @@ const EditScheduleScreen = ({ navigation, route }) => {
 
   const medType = (medicine.type || 'TABLET').toUpperCase();
   const unitOptions = TYPE_UNITS[medType]?.options || TYPE_UNITS.OTHER.options;
+  const isAsNeeded = frequencyType === 'AS_NEEDED';
 
   // Load per-schedule notification preference
   useEffect(() => {
@@ -50,7 +67,6 @@ const EditScheduleScreen = ({ navigation, route }) => {
         if (stored !== null) {
           setNotificationsOn(stored === 'true');
         }
-        // Default is true (on) if never set
       } catch (e) {}
     };
     if (schedule.id) loadNotifPref();
@@ -59,6 +75,12 @@ const EditScheduleScreen = ({ navigation, route }) => {
   const handleToggleNotification = async (value) => {
     setNotificationsOn(value);
     await AsyncStorage.setItem(`schedule_notif_${schedule.id}`, String(value));
+  };
+
+  const toggleDay = (dayKey) => {
+    setCustomDays(prev =>
+      prev.includes(dayKey) ? prev.filter(d => d !== dayKey) : [...prev, dayKey]
+    );
   };
 
   const onTimeChange = (event, selectedDate) => {
@@ -90,29 +112,60 @@ const EditScheduleScreen = ({ navigation, route }) => {
     setTimes([...times, new Date()]);
   };
 
+  const adjustStock = (delta) => {
+    const current = parseInt(currentStock) || 0;
+    const newVal = Math.max(0, current + delta);
+    setCurrentStock(String(newVal));
+  };
+
   const handleSave = async () => {
     if (!doseAmount) {
       Alert.alert("Error", "Please fill in dosage amount.");
       return;
     }
+    if (frequencyType === 'CUSTOM' && customDays.length === 0) {
+      Alert.alert('Error', 'Please select at least one day for custom frequency.');
+      return;
+    }
     
     setSaving(true);
     try {
-      const formattedTimes = times.map(t => {
-        return t.getHours().toString().padStart(2, '0') + ":" + t.getMinutes().toString().padStart(2, '0') + ":00";
-      });
-
       const payload = {
         doseAmount: parseFloat(doseAmount) || 1,
         doseUnit: doseUnit,
         currentStock: currentStock.trim() ? parseInt(currentStock) : null,
-        times: formattedTimes,
-        frequencyType: schedule.frequencyType || 'DAILY',
+        frequencyType: frequencyType === 'CUSTOM' ? 'SPECIFIC_DAYS' : frequencyType,
       };
 
+      // Only include times if not AS_NEEDED
+      if (!isAsNeeded) {
+        payload.times = times.map(t =>
+          t.getHours().toString().padStart(2, '0') + ":" + t.getMinutes().toString().padStart(2, '0') + ":00"
+        );
+      }
+
+      // Include custom days
+      if (frequencyType === 'CUSTOM') {
+        payload.customDays = customDays.join(',');
+      }
+
       await api.put(`/schedules/${schedule.id}`, payload);
-      // Save notification preference
       await AsyncStorage.setItem(`schedule_notif_${schedule.id}`, String(notificationsOn));
+
+      // Re-schedule notifications for the updated times
+      if (!isAsNeeded && notificationsOn) {
+        const userId = schedule.userId || schedule.user?.id;
+        for (const t of times) {
+          await scheduleMedicationReminder(
+            medicine.name || 'Medication',
+            t.getHours(),
+            t.getMinutes(),
+            schedule.id,
+            userId
+          );
+        }
+      }
+
       Alert.alert("Updated", "Schedule updated successfully!");
       navigation.goBack();
     } catch (e) {
@@ -123,6 +176,29 @@ const EditScheduleScreen = ({ navigation, route }) => {
     }
   };
 
+  const handleDelete = () => {
+    Alert.alert(
+      "Delete Schedule",
+      "Are you sure you want to delete this schedule? This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await api.delete(`/schedules/${schedule.id}`);
+              Alert.alert("Deleted", "Schedule has been removed.");
+              navigation.goBack();
+            } catch (e) {
+              Alert.alert("Error", "Failed to delete schedule.");
+            }
+          }
+        }
+      ]
+    );
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
@@ -130,9 +206,12 @@ const EditScheduleScreen = ({ navigation, route }) => {
         {/* Medicine name (read-only) */}
         <View style={styles.medicineHeader}>
           <Text style={styles.medicineName}>{medicine.name || 'Medication'}</Text>
-          <Text style={styles.medicineType}>{medicine.type || ''}</Text>
+          <Text style={styles.medicineType}>
+            <MaterialCommunityIcons name={TYPE_UNITS[medType]?.icon || 'pill'} size={14} color={colors.textSecondary} /> {medType.charAt(0) + medType.slice(1).toLowerCase()}
+          </Text>
         </View>
 
+        {/* Dosage */}
         <Text style={styles.label}>Dosage per Dose</Text>
         <View style={styles.row}>
           <TextInput
@@ -141,7 +220,7 @@ const EditScheduleScreen = ({ navigation, route }) => {
             onChangeText={setDoseAmount}
             placeholder="1"
             keyboardType="numeric"
-            placeholderTextColor="#bdc3c7"
+            placeholderTextColor={colors.textTertiary}
           />
           <View style={{ flex: 2 }}>
             <View style={styles.chipRow}>
@@ -158,49 +237,111 @@ const EditScheduleScreen = ({ navigation, route }) => {
           </View>
         </View>
 
-        {/* Schedule Times */}
-        <Text style={styles.label}>Schedule Times</Text>
-        {times.map((t, idx) => (
-          <View key={idx} style={styles.timeRow}>
-            <TouchableOpacity style={styles.timeButton} onPress={() => showTimepicker(idx)}>
-              <Text style={styles.timeButtonText}>⏰ {formatTime(t)}</Text>
+        {/* Frequency */}
+        <Text style={styles.label}>Frequency</Text>
+        <View style={styles.chipRow}>
+          {['DAILY', 'WEEKLY', 'CUSTOM', 'AS_NEEDED'].map(f => (
+            <TouchableOpacity
+              key={f}
+              style={[styles.chip, frequencyType === f && styles.chipActive]}
+              onPress={() => setFrequencyType(f)}
+            >
+              <Text style={[styles.chipText, frequencyType === f && styles.chipTextActive]}>
+                {f === 'CUSTOM' ? 'Custom' : f === 'AS_NEEDED' ? 'As Needed' : f.charAt(0) + f.slice(1).toLowerCase()}
+              </Text>
             </TouchableOpacity>
-            {times.length > 1 && (
-              <TouchableOpacity style={styles.removeTimeBtn} onPress={() => removeTime(idx)}>
-                <Text style={styles.removeTimeBtnText}>✗</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        ))}
-        <TouchableOpacity style={styles.addTimeBtn} onPress={addTime}>
-          <Text style={styles.addTimeBtnText}>+ Add Another Time</Text>
-        </TouchableOpacity>
+          ))}
+        </View>
 
-        {showPicker && (
-          <DateTimePicker
-            value={times[currentPickerIndex]}
-            mode="time"
-            is24Hour={false}
-            display="default"
-            onChange={onTimeChange}
-          />
+        {/* Custom Days Selector */}
+        {frequencyType === 'CUSTOM' && (
+          <View style={styles.daySelector}>
+            <Text style={styles.dayLabel}>Select Days</Text>
+            <View style={styles.dayRow}>
+              {DAYS_OF_WEEK.map(d => (
+                <TouchableOpacity
+                  key={d.key}
+                  style={[styles.dayChip, customDays.includes(d.key) && styles.dayChipActive]}
+                  onPress={() => toggleDay(d.key)}
+                >
+                  <Text style={[styles.dayChipText, customDays.includes(d.key) && styles.dayChipTextActive]}>
+                    {d.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
         )}
 
-        {/* Stock */}
+        {/* As Needed info */}
+        {isAsNeeded && (
+          <View style={styles.infoCard}>
+            <Text style={styles.infoText}><MaterialCommunityIcons name="information" size={14} color={colors.primary} /> No scheduled reminders — take when needed. Stock tracking still works.</Text>
+          </View>
+        )}
+
+        {/* Schedule Times — hidden for AS_NEEDED */}
+        {!isAsNeeded && (
+          <>
+            <Text style={styles.label}>Schedule Times</Text>
+            {times.map((t, idx) => (
+              <View key={idx} style={styles.timeRow}>
+                <TouchableOpacity style={styles.timeButton} onPress={() => showTimepicker(idx)}>
+                  <Text style={styles.timeButtonText}><MaterialCommunityIcons name="clock-outline" size={16} color={colors.text} /> {formatTime(t)}</Text>
+                </TouchableOpacity>
+                {times.length > 1 && (
+                  <TouchableOpacity style={styles.removeTimeBtn} onPress={() => removeTime(idx)}>
+                    <Text style={styles.removeTimeBtnText}><MaterialCommunityIcons name="close" size={16} color={colors.danger} /></Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))}
+            <TouchableOpacity style={styles.addTimeBtn} onPress={addTime}>
+              <Text style={styles.addTimeBtnText}>+ Add Another Time</Text>
+            </TouchableOpacity>
+
+            {showPicker && (
+              <DateTimePicker
+                value={times[currentPickerIndex]}
+                mode="time"
+                is24Hour={false}
+                display="default"
+                onChange={onTimeChange}
+              />
+            )}
+          </>
+        )}
+
+        {/* Stock with +/- controls */}
         <Text style={styles.label}>Current Stock</Text>
-        <TextInput
-          style={styles.input}
-          value={currentStock}
-          onChangeText={setCurrentStock}
-          placeholder="e.g., 30"
-          keyboardType="numeric"
-          placeholderTextColor="#bdc3c7"
-        />
+        <View style={styles.stockRow}>
+          <TouchableOpacity style={styles.stockBtn} onPress={() => adjustStock(-1)}>
+            <Text style={styles.stockBtnText}>−</Text>
+          </TouchableOpacity>
+          <TextInput
+            style={[styles.input, styles.stockInput]}
+            value={currentStock}
+            onChangeText={setCurrentStock}
+            placeholder="0"
+            keyboardType="numeric"
+            placeholderTextColor={colors.textTertiary}
+            textAlign="center"
+          />
+          <TouchableOpacity style={[styles.stockBtn, styles.stockBtnPlus]} onPress={() => adjustStock(1)}>
+            <Text style={[styles.stockBtnText, styles.stockBtnPlusText]}>+</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.stockQuickBtn} onPress={() => adjustStock(10)}>
+            <Text style={styles.stockQuickBtnText}>+10</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.stockQuickBtn} onPress={() => adjustStock(30)}>
+            <Text style={styles.stockQuickBtnText}>+30</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Notification Toggle */}
         <View style={styles.notifCard}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.notifTitle}>🔔 Reminders</Text>
+            <Text style={styles.notifTitle}><MaterialCommunityIcons name="bell-ring-outline" size={15} color={colors.text} /> Reminders</Text>
             <Text style={styles.notifHint}>
               {notificationsOn 
                 ? 'You will get reminders for this medicine' 
@@ -210,18 +351,23 @@ const EditScheduleScreen = ({ navigation, route }) => {
           <Switch
             value={notificationsOn}
             onValueChange={handleToggleNotification}
-            trackColor={{ false: '#d1d5db', true: '#86efac' }}
-            thumbColor={notificationsOn ? '#22c55e' : '#9ca3af'}
+            trackColor={{ false: colors.border, true: colors.successLight }}
+            thumbColor={notificationsOn ? colors.success : colors.textTertiary}
           />
         </View>
 
         {/* Save Button */}
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving}>
           {saving ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={colors.textInverse} />
           ) : (
-            <Text style={styles.saveBtnText}>💾 Update Schedule</Text>
+            <Text style={styles.saveBtnText}><MaterialCommunityIcons name="content-save-outline" size={17} color={colors.textInverse} /> Update Schedule</Text>
           )}
+        </TouchableOpacity>
+
+        {/* Delete Button */}
+        <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
+          <Text style={styles.deleteBtnText}><MaterialCommunityIcons name="delete-outline" size={15} color={colors.danger} /> Delete Schedule</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -229,65 +375,99 @@ const EditScheduleScreen = ({ navigation, route }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f6f9fc' },
-  scrollContent: { padding: 20, paddingBottom: 40 },
+  container: { flex: 1, backgroundColor: colors.background },
+  scrollContent: { padding: spacing.xl, paddingBottom: 120 },
 
   medicineHeader: {
-    backgroundColor: '#fff', borderRadius: 14, padding: 16,
-    marginBottom: 8, elevation: 2,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 4,
+    backgroundColor: colors.surface, borderRadius: radii.lg, padding: spacing.lg,
+    marginBottom: spacing.sm, ...shadows.sm,
   },
-  medicineName: { fontSize: 20, fontWeight: '800', color: '#2c3e50' },
-  medicineType: { fontSize: 13, color: '#7f8c8d', marginTop: 2 },
+  medicineName: { fontSize: 20, fontFamily: fonts.bold, color: colors.text },
+  medicineType: { fontSize: 13, fontFamily: fonts.regular, color: colors.textSecondary, marginTop: 2 },
 
-  label: { fontSize: 13, fontWeight: '700', color: '#34495e', marginBottom: 6, marginTop: 16, textTransform: 'uppercase', letterSpacing: 0.5 },
+  label: { ...typography.sectionLabel, marginBottom: spacing.xs, marginTop: spacing.lg },
   input: {
-    backgroundColor: '#fff', borderWidth: 1, borderColor: '#e0e6ed',
-    borderRadius: 12, padding: 14, fontSize: 16, color: '#2c3e50',
+    backgroundColor: colors.surfaceHover, borderWidth: 0,
+    borderRadius: radii.md, padding: spacing.md, fontSize: 16, fontFamily: fonts.regular, color: colors.text,
   },
   row: { flexDirection: 'row', alignItems: 'flex-start' },
 
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
-    paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20,
-    borderWidth: 1, borderColor: '#ddd', backgroundColor: '#fff',
+    paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.full,
+    backgroundColor: colors.surfaceHover,
   },
-  chipActive: { backgroundColor: '#3498db', borderColor: '#3498db' },
-  chipText: { fontSize: 13, fontWeight: '600', color: '#7f8c8d' },
-  chipTextActive: { color: '#fff' },
+  chipActive: { backgroundColor: colors.primary },
+  chipText: { fontSize: 13, fontFamily: fonts.semiBold, color: colors.textSecondary },
+  chipTextActive: { color: colors.textInverse },
 
-  timeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  daySelector: { marginTop: spacing.sm },
+  dayLabel: { fontSize: 12, fontFamily: fonts.regular, color: colors.textSecondary, marginBottom: spacing.sm },
+  dayRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  dayChip: {
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.surfaceHover,
+  },
+  dayChipActive: { backgroundColor: colors.primary },
+  dayChipText: { fontSize: 14, fontFamily: fonts.bold, color: colors.textSecondary },
+  dayChipTextActive: { color: colors.textInverse },
+
+  infoCard: {
+    backgroundColor: colors.primaryBg, borderRadius: radii.md, padding: spacing.md,
+    marginTop: spacing.md, borderLeftWidth: 4, borderLeftColor: colors.primary,
+  },
+  infoText: { fontSize: 13, fontFamily: fonts.regular, color: colors.text, lineHeight: 18 },
+
+  timeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm },
   timeButton: {
-    flex: 1, backgroundColor: '#fff', padding: 14,
-    borderRadius: 12, borderWidth: 1, borderColor: '#e0e6ed',
+    flex: 1, backgroundColor: colors.surfaceHover, padding: spacing.md,
+    borderRadius: radii.md,
   },
-  timeButtonText: { fontSize: 16, color: '#2c3e50', fontWeight: '600' },
+  timeButtonText: { fontSize: 16, fontFamily: fonts.semiBold, color: colors.text },
   removeTimeBtn: {
-    marginLeft: 10, padding: 10, backgroundColor: '#fef2f2', borderRadius: 10,
+    marginLeft: spacing.sm, padding: spacing.sm, backgroundColor: colors.dangerLight, borderRadius: radii.sm,
   },
-  removeTimeBtnText: { color: '#e74c3c', fontWeight: '700', fontSize: 16 },
-  addTimeBtn: { marginTop: 4, marginBottom: 8 },
-  addTimeBtnText: { color: '#3498db', fontWeight: '600', fontSize: 14 },
+  removeTimeBtnText: { color: colors.danger, fontFamily: fonts.bold, fontSize: 16 },
+  addTimeBtn: { marginTop: spacing.xs, marginBottom: spacing.sm },
+  addTimeBtnText: { color: colors.primary, fontFamily: fonts.semiBold, fontSize: 14 },
+
+  stockRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  stockInput: { flex: 1 },
+  stockBtn: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: colors.dangerLight, alignItems: 'center', justifyContent: 'center',
+  },
+  stockBtnText: { fontSize: 22, fontFamily: fonts.bold, color: colors.danger },
+  stockBtnPlus: { backgroundColor: colors.successLight },
+  stockBtnPlusText: { color: colors.success },
+  stockQuickBtn: {
+    paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.full,
+    backgroundColor: colors.primaryBg,
+  },
+  stockQuickBtnText: { fontSize: 12, fontFamily: fonts.bold, color: colors.primary },
 
   notifCard: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#fff', borderRadius: 14, padding: 16,
-    marginTop: 16, elevation: 2,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 4,
-    borderWidth: 1, borderColor: '#e0e6ed',
+    backgroundColor: colors.surface, borderRadius: radii.lg, padding: spacing.lg,
+    marginTop: spacing.lg, ...shadows.sm,
   },
-  notifTitle: { fontSize: 15, fontWeight: '600', color: '#2c3e50' },
-  notifHint: { fontSize: 11, color: '#95a5a6', marginTop: 2 },
+  notifTitle: { fontSize: 15, fontFamily: fonts.semiBold, color: colors.text },
+  notifHint: { fontSize: 11, fontFamily: fonts.regular, color: colors.textTertiary, marginTop: 2 },
 
   saveBtn: {
-    backgroundColor: '#27ae60', paddingVertical: 16, borderRadius: 12,
-    alignItems: 'center', marginTop: 24,
-    elevation: 3, shadowColor: '#27ae60',
-    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6,
+    backgroundColor: colors.success, paddingVertical: spacing.lg, borderRadius: radii.md,
+    alignItems: 'center', marginTop: spacing.xxl,
+    ...shadows.colored(colors.success),
   },
-  saveBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  saveBtnText: { color: colors.textInverse, fontSize: 17, fontFamily: fonts.bold },
+
+  deleteBtn: {
+    paddingVertical: spacing.md, borderRadius: radii.md,
+    alignItems: 'center', marginTop: spacing.md,
+    backgroundColor: colors.dangerLight,
+  },
+  deleteBtnText: { color: colors.danger, fontSize: 15, fontFamily: fonts.semiBold },
 });
 
 export default EditScheduleScreen;

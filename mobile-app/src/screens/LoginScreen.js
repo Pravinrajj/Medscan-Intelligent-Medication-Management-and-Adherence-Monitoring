@@ -1,12 +1,15 @@
 import React, { useState, useContext } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, SafeAreaView, StatusBar } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
+import { colors, fonts, spacing, radii, shadows, typography } from '../theme';
 
 const LoginScreen = ({ navigation }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  
+  const [showPassword, setShowPassword] = useState(false);
+
   const { login } = useContext(AuthContext);
 
   const handleLogin = async () => {
@@ -14,7 +17,6 @@ const LoginScreen = ({ navigation }) => {
       Alert.alert('Error', 'Please enter both username and password.');
       return;
     }
-
     setLoading(true);
     try {
       await login(username.trim(), password);
@@ -28,51 +30,62 @@ const LoginScreen = ({ navigation }) => {
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <StatusBar barStyle="light-content" />
+
+      {/* Top Section */}
       <View style={styles.topSection}>
-        <Text style={styles.logo}>💊</Text>
+        <View style={styles.iconCircle}>
+          <MaterialCommunityIcons name="pill" size={32} color={colors.textInverse} />
+        </View>
         <Text style={styles.appName}>MedScan</Text>
-        <Text style={styles.tagline}>Your medication companion</Text>
+        <Text style={styles.tagline}>Intelligent Medication Management</Text>
       </View>
 
+      {/* Form */}
       <View style={styles.formSection}>
         <Text style={styles.title}>Welcome Back</Text>
+        <Text style={styles.subtitle}>Sign in to continue</Text>
 
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Username</Text>
-          <TextInput
-            style={styles.input}
-            value={username}
-            onChangeText={setUsername}
-            placeholder="Enter your username"
-            placeholderTextColor="#bdc3c7"
-            autoCapitalize="none"
-          />
+        <View style={styles.inputGroup}>
+          <View style={styles.inputWrapper}>
+            <MaterialCommunityIcons name="account-outline" size={20} color={colors.textTertiary} style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              value={username}
+              onChangeText={setUsername}
+              placeholder="Username, email, or phone"
+              placeholderTextColor={colors.textTertiary}
+              autoCapitalize="none"
+            />
+          </View>
+
+          <View style={styles.inputWrapper}>
+            <MaterialCommunityIcons name="lock-outline" size={20} color={colors.textTertiary} style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Password"
+              placeholderTextColor={colors.textTertiary}
+              secureTextEntry={!showPassword}
+            />
+            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
+              <MaterialCommunityIcons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color={colors.textTertiary} />
+            </TouchableOpacity>
+          </View>
         </View>
 
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Enter your password"
-            placeholderTextColor="#bdc3c7"
-            secureTextEntry
-          />
-        </View>
-
-        <TouchableOpacity style={styles.loginBtn} onPress={handleLogin} disabled={loading}>
+        <TouchableOpacity style={styles.loginBtn} onPress={handleLogin} disabled={loading} activeOpacity={0.8}>
           {loading ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={colors.textInverse} />
           ) : (
             <Text style={styles.loginBtnText}>Sign In</Text>
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-          <Text style={styles.registerLink}>
-            Don't have an account? <Text style={styles.registerLinkBold}>Sign Up</Text>
-          </Text>
+        <TouchableOpacity onPress={() => navigation.navigate('Register')} style={styles.registerRow}>
+          <Text style={styles.registerText}>Don't have an account? </Text>
+          <Text style={styles.registerLink}>Sign Up</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -80,55 +93,48 @@ const LoginScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f6f9fc' },
-  
+  container: { flex: 1, backgroundColor: colors.background },
+
   topSection: {
-    flex: 0.35,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#3498db',
-    borderBottomLeftRadius: 40,
-    borderBottomRightRadius: 40,
+    flex: 0.32, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.primary,
+    borderBottomLeftRadius: 32, borderBottomRightRadius: 32,
   },
-  logo: { fontSize: 56 },
-  appName: { fontSize: 32, fontWeight: '800', color: '#fff', marginTop: 8 },
-  tagline: { fontSize: 14, color: 'rgba(255,255,255,0.8)', marginTop: 4 },
-
-  formSection: {
-    flex: 0.65,
-    padding: 30,
-    justifyContent: 'center',
+  iconCircle: {
+    width: 64, height: 64, borderRadius: 32,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md,
   },
-  title: { fontSize: 24, fontWeight: '800', color: '#2c3e50', marginBottom: 24 },
+  appName: { fontSize: 30, fontFamily: fonts.bold, color: colors.textInverse, letterSpacing: -0.5 },
+  tagline: { fontSize: 13, fontFamily: fonts.regular, color: 'rgba(255,255,255,0.75)', marginTop: spacing.xs },
 
-  inputContainer: { marginBottom: 16 },
-  label: { fontSize: 13, fontWeight: '600', color: '#7f8c8d', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
+  formSection: { flex: 0.68, padding: spacing.xxl + 4, justifyContent: 'center' },
+  title: { ...typography.h1, marginBottom: spacing.xs },
+  subtitle: { ...typography.caption, marginBottom: spacing.xxl },
+
+  inputGroup: { gap: spacing.md, marginBottom: spacing.xxl },
+  inputWrapper: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: colors.surfaceHover, borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+  },
+  inputIcon: { marginRight: spacing.sm },
   input: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e0e6ed',
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 16,
-    color: '#2c3e50',
+    flex: 1, fontSize: 15, fontFamily: fonts.regular, color: colors.text,
+    paddingVertical: spacing.md + 2,
   },
+  eyeBtn: { padding: spacing.sm },
 
   loginBtn: {
-    backgroundColor: '#3498db',
-    paddingVertical: 15,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 8,
-    elevation: 2,
-    shadowColor: '#3498db',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
+    backgroundColor: colors.primary, paddingVertical: spacing.md + 2,
+    borderRadius: radii.md, alignItems: 'center',
+    ...shadows.colored(colors.primary),
   },
-  loginBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  loginBtnText: { color: colors.textInverse, fontSize: 16, fontFamily: fonts.bold },
 
-  registerLink: { textAlign: 'center', marginTop: 20, color: '#7f8c8d', fontSize: 14 },
-  registerLinkBold: { color: '#3498db', fontWeight: '700' },
+  registerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: spacing.xxl },
+  registerText: { fontSize: 14, fontFamily: fonts.regular, color: colors.textSecondary },
+  registerLink: { fontSize: 14, fontFamily: fonts.bold, color: colors.primary },
 });
 
 export default LoginScreen;

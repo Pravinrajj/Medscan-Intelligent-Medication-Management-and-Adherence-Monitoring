@@ -9,4 +9,5 @@ import java.util.List;
 @Repository
 public interface GroupActivityRepository extends MongoRepository<GroupActivity, String> {
     List<GroupActivity> findByGroupIdOrderByTimestampDesc(Long groupId);
+    GroupActivity findTop1ByGroupIdOrderByTimestampDesc(Long groupId);
 }

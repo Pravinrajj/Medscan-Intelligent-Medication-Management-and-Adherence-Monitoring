@@ -13,6 +13,7 @@ import java.util.Optional;
 /**
  * NotificationController handles push token registration and test endpoints.
  */
+@CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
 @RequestMapping("/api/notifications")
 public class NotificationController {

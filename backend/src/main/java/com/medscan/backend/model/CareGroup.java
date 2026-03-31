@@ -22,6 +22,12 @@ public class CareGroup {
     @Column(name = "group_name", nullable = false)
     private String groupName;
 
+    @Column(name = "description")
+    private String description;
+
+    @Column(name = "allow_member_triggers")
+    private Boolean allowMemberTriggers = false;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 

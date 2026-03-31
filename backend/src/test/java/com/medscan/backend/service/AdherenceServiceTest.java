@@ -3,6 +3,8 @@ package com.medscan.backend.service;
 import com.medscan.backend.model.AdherenceLog;
 import com.medscan.backend.model.MedicationSchedule;
 import com.medscan.backend.repository.mongo.AdherenceRepository;
+import com.medscan.backend.repository.mysql.CareGroupRepository;
+import com.medscan.backend.repository.mysql.GroupMemberRepository;
 import com.medscan.backend.repository.mysql.MedicationScheduleRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -10,6 +12,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import java.util.Collections;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -23,14 +26,35 @@ public class AdherenceServiceTest {
     private AdherenceService adherenceService;
 
     @Mock
+    private CareGroupRepository careGroupRepository;
+
+    @Mock
+    private GroupService groupService;
+
+    @Mock
+    private PushNotificationService pushNotificationService;
+
+    @Mock
     private AdherenceRepository adherenceRepository;
 
     @Mock
     private MedicationScheduleRepository scheduleRepository;
 
+    @Mock
+    private GroupMemberRepository groupMemberRepository;
+
     @BeforeEach
     public void setUp() {
         MockitoAnnotations.openMocks(this);
+
+        when(groupMemberRepository.findByIdUserId(anyLong()))
+                .thenReturn(Collections.emptyList());
+
+        when(groupMemberRepository.findByGroup(any()))
+                .thenReturn(Collections.emptyList());
+
+        when(adherenceRepository.countByScheduleIdAndTimestampAfter(anyLong(), any()))
+                .thenReturn(0L);
     }
 
     @Test

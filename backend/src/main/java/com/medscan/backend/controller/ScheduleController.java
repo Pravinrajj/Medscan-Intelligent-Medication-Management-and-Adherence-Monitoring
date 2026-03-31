@@ -33,12 +33,14 @@ public class ScheduleController {
         schedule.setStartDate(scheduleRequest.getStartDate());
         schedule.setEndDate(scheduleRequest.getEndDate());
         schedule.setFrequencyType(scheduleRequest.getFrequencyType());
+        schedule.setCustomDays(scheduleRequest.getCustomDays());
         
         // Inventory
         schedule.setDoseAmount(scheduleRequest.getDoseAmount());
         schedule.setDoseUnit(scheduleRequest.getDoseUnit());
         schedule.setCurrentStock(scheduleRequest.getCurrentStock());
         schedule.setInitialStock(scheduleRequest.getCurrentStock());
+        schedule.setBundleName(scheduleRequest.getBundleName());
 
         return ResponseEntity.ok(scheduleService.createSchedule(userId, medicineId, schedule, scheduleRequest.getTimes()));
     }
@@ -53,7 +55,9 @@ public class ScheduleController {
         updates.setDoseUnit(request.getDoseUnit());
         updates.setCurrentStock(request.getCurrentStock());
         updates.setFrequencyType(request.getFrequencyType());
+        updates.setCustomDays(request.getCustomDays());
         updates.setEndDate(request.getEndDate());
+        updates.setBundleName(request.getBundleName());
 
         return ResponseEntity.ok(scheduleService.updateSchedule(scheduleId, updates, request.getTimes()));
     }
@@ -75,6 +79,7 @@ public class ScheduleController {
         private Double doseAmount;
         private String doseUnit;
         private Integer currentStock;
+        private String customDays;
 
         // Getters/Setters
         public java.time.LocalDate getStartDate() { return startDate; }
@@ -92,5 +97,11 @@ public class ScheduleController {
         public void setDoseUnit(String doseUnit) { this.doseUnit = doseUnit; }
         public Integer getCurrentStock() { return currentStock; }
         public void setCurrentStock(Integer currentStock) { this.currentStock = currentStock; }
+        public String getCustomDays() { return customDays; }
+        public void setCustomDays(String customDays) { this.customDays = customDays; }
+
+        private String bundleName;
+        public String getBundleName() { return bundleName; }
+        public void setBundleName(String bundleName) { this.bundleName = bundleName; }
     }
 }

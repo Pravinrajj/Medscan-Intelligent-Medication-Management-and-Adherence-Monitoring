@@ -94,8 +94,18 @@ export const AuthProvider = ({ children }) => {
               console.log('[Auth] Push token re-registration skipped:', e.message)
             );
           } catch (validationError) {
-            console.log('Token invalid, clearing session:', validationError.message);
-            await logout();
+            // Only logout if it's a real auth error (401/403), NOT network errors
+            const status = validationError.response?.status;
+            if (status === 401 || status === 403) {
+              console.log('Token invalid (', status, '), clearing session');
+              await logout();
+            } else {
+              // Network error or server down — keep user logged in with cached data
+              console.log('[Auth] Server unreachable, using cached session:', validationError.message);
+              const parsedUser = JSON.parse(userInfoStr);
+              setUserToken(token);
+              setUserInfo(parsedUser);
+            }
           }
         }
       }

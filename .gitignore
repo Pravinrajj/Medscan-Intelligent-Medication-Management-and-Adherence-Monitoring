@@ -99,3 +99,5 @@ __pycache__/
 # =========================
 mediscan-ocr/__pycache__/
 mediscan-ocr/temp/
+output/
+google-services.json

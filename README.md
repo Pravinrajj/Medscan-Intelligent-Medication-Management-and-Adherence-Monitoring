@@ -117,37 +117,27 @@ OCRMetadata
 
 ## Project Structure
 
-```
+```yaml
 MedScan/
-├── backend/                          # Spring Boot 3.2.5
-│   ├── src/main/java/com/medscan/backend/
-│   │   ├── config/                   # Security, validation configuration
-│   │   ├── controller/               # 9 REST controllers (Auth, Schedule, Adherence, etc.)
-│   │   ├── service/                  # 9 services (business logic)
-│   │   ├── model/                    # 15+ JPA entities
-│   │   ├── repository/               # 6 MySQL + 2 MongoDB repositories
-│   │   └── security/                 # JWT authentication
-│   ├── src/test/java/                # Unit tests
-│   └── pom.xml                       # Maven dependencies
-│
-├── mobile-app/                       # React Native + Expo SDK 54
-│   ├── src/
-│   │   ├── screens/                  # 13 screens (Login, Dashboard, AddMedicine, etc.)
-│   │   ├── components/               # Reusable UI components
-│   │   ├── context/                  # AuthContext (global state)
-│   │   ├── api/                      # Axios HTTP client
-│   │   └── services/                 # OfflineSyncService, NotificationService
-│   ├── App.js                        # Navigation root
-│   ├── package.json                  # Dependencies
-│   └── app.json                      # Expo config
-│
-├── ml-service/                       # Python FastAPI
-│   ├── main.py                       # OCR & barcode endpoints
-│   └── requirements.txt              # Python dependencies
-│
-├── datasets/                         # CSV data files
-├── README.md                         # This file
-└── PROJECT_DOCUMENTATION.md          # Detailed SRS & design
+  backend/:                          # Spring Boot 3.2.5
+    src/main/java/com/medscan/backend/
+      config/:                       # Security config
+      controller/:                   # 9 REST controllers
+      service/:                      # Business logic
+    src/test/java/                   # Unit tests
+    pom.xml                          # Maven dependencies
+
+  mobile-app/:                       # React Native + Expo
+    src/
+      screens/:                      # 13 UI screens
+      components/:                   # Reusable UI
+    App.js                           # Navigation root
+    package.json                     # Dependencies
+
+  ml-service/:                       # Python FastAPI
+    main.py                          # OCR & barcode
+    requirements.txt                 # Dependencies
+
 ```
 
 **Backend Services:**
@@ -381,44 +371,3 @@ git push origin feature/new-feature  # Push
 - **Sensitive Data**: Passwords never logged
 
 ---
-
-## Contributing
-
-### Code Standards
-- Java: Google Java Style Guide, max line 100 chars
-- JavaScript: Airbnb ESLint config, arrow functions for callbacks
-- Meaningful names, avoid abbreviations
-
-### Commit Format
-- `feat(scope): description` - New feature
-- `fix(scope): description` - Bug fix
-- `docs: description` - Documentation
-- `refactor: description` - Code refactoring
-
-### Pull Request
-1. Fork repository
-2. Create feature branch
-3. Add tests for new features
-4. Ensure CI checks pass
-5. Submit PR with description
-6. Await code review & approval
-
----
-
-## License
-
-MIT License - See [LICENSE](LICENSE) for details
-
----
-
-## Contact & Support
-
-**Project Maintainer**: [Your Name]  
-**Email**: [your.email@example.com]  
-**GitHub**: [repository-link]
-
-For detailed technical documentation, see [PROJECT_DOCUMENTATION.md](PROJECT_DOCUMENTATION.md)
-
----
-
-**Status**: MVP Complete (v1.0.0) | Last Updated: February 23, 2026

@@ -60,33 +60,36 @@ public class DataImportService implements CommandLineRunner {
             while ((line = br.readLine()) != null) {
                 try {
                     String[] cols = parseCsvLine(line);
-                    // Kaggle cols: sub_category, product_name, salt_composition, product_price,
-                    //              product_manufactured, medicine_desc, side_effects, drug_interactions
-                    if (cols.length < 5) {
+                    // CSV cols: id, salt_name, description, drug_interactions(JSON),
+                    //           manufacturer, brand_name, price, side_effects, therapeutic_class
+                    if (cols.length < 6) {
                         skipped++;
                         continue;
                     }
 
-                    String productName = clean(cols[1]);
-                    if (productName == null || productName.isEmpty()) {
+                    // cols[0] = id (skip, auto-generated)
+                    String saltName = clean(cols[1]);
+                    String brandName = clean(cols.length > 5 ? cols[5] : null);
+
+                    if ((brandName == null || brandName.isEmpty()) && (saltName == null || saltName.isEmpty())) {
                         skipped++;
                         continue;
                     }
 
                     DrugLookup dl = new DrugLookup();
-                    dl.setName(productName);
-                    dl.setSubCategory(truncate(clean(cols[0]), 255));
-                    dl.setComposition1(truncate(clean(cols[2]), 512));
+                    dl.setSaltName(truncate(saltName, 512));
+                    dl.setName(truncate(brandName != null ? brandName : saltName, 512));
+                    dl.setDescription(clean(cols[2]));
+                    dl.setDrugInteractions(clean(cols[3])); // JSON string
+                    dl.setManufacturer(truncate(clean(cols[4]), 512));
                     try {
-                        String priceStr = clean(cols[3]);
+                        String priceStr = clean(cols.length > 6 ? cols[6] : null);
                         if (priceStr != null) {
                             dl.setPrice(Double.parseDouble(priceStr.replaceAll("[^0-9.]", "")));
                         }
                     } catch (Exception e) { dl.setPrice(null); }
-                    dl.setManufacturer(truncate(clean(cols[4]), 512));
-                    if (cols.length > 5) dl.setDescription(clean(cols[5]));
-                    if (cols.length > 6) dl.setSideEffects(clean(cols[6]));
-                    if (cols.length > 7) dl.setDrugInteractions(clean(cols[7]));
+                    if (cols.length > 7) dl.setSideEffects(clean(cols[7]));
+                    if (cols.length > 8) dl.setTherapeuticClass(truncate(clean(cols[8]), 512));
 
                     batch.add(dl);
                     imported++;

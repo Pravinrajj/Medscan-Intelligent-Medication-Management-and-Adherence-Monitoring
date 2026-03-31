@@ -64,6 +64,8 @@ public class ScheduleService {
         if (updates.getCurrentStock() != null) existing.setCurrentStock(updates.getCurrentStock());
         if (updates.getFrequencyType() != null) existing.setFrequencyType(updates.getFrequencyType());
         if (updates.getEndDate() != null) existing.setEndDate(updates.getEndDate());
+        // bundleName can be set or cleared (null removes from bundle)
+        existing.setBundleName(updates.getBundleName());
 
         // Replace schedule times if provided
         if (newTimes != null && !newTimes.isEmpty()) {

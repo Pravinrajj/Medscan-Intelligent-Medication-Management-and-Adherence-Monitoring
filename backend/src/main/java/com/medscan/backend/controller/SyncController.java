@@ -15,6 +15,7 @@ import java.util.*;
  * in a single batch request for efficient syncing.
  * Uses timestamp-based conflict resolution (last-write-wins).
  */
+@CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
 @RequestMapping("/api/sync")
 public class SyncController {
