@@ -562,7 +562,7 @@ def extract_medicine_name(detections: list, image_height: int) -> StripResult:
     candidates: List[StripCandidate] = []
     for det in detections:
     # ── Step 1: Build candidates ──────────────────────────────
-    candidates = []
+        candidates = []
 
     for det in detections:
         # ✅ Step 1: Compute y_center FIRST
@@ -883,9 +883,6 @@ def extract_medicine_name(detections: list, image_height: int) -> StripResult:
         brand_name=brand_name,
         composition=composition,
         confidence=confidence,
-        brand_name=None,
-        composition=[],
-        confidence=0.0,
         all_candidates=filtered,
         raw_text=raw_text,
     )
